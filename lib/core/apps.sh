@@ -13,9 +13,7 @@ apps_launch_ide() {
         return 1
     fi
 
-    local ide_app
-    local ide_open
-    local project_path
+    local ide_app ide_open project_path
     ide_app=$(echo "$project_config" | jq -r '.ide.app // "Cursor"')
     ide_open=$(echo "$project_config" | jq -r '.ide.open // "."')
     project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
@@ -27,7 +25,7 @@ apps_launch_ide() {
 
     local full_path="$project_path/$ide_open"
     log_info "Opening $ide_app: $full_path"
-    open -a "$ide_app" "$full_path" &
+    open -a "$ide_app" "$full_path"
 }
 
 apps_launch_terminal() {
@@ -36,9 +34,7 @@ apps_launch_terminal() {
     local project_config
     project_config=$(config_get_project "$project")
 
-    local use_tmux
-    local terminal_app
-    local project_path
+    local use_tmux terminal_app project_path
     use_tmux=$(echo "$project_config" | jq -r '.terminal.tmux // false')
     terminal_app=$(echo "$project_config" | jq -r '.terminal.app // "iTerm"')
     project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
@@ -46,34 +42,36 @@ apps_launch_terminal() {
     local session_name="${project}-${branch}"
     session_name=$(echo "$session_name" | tr '/' '-' | tr '.' '-')
 
-    log_info "Opening $terminal_app with tmux session: $session_name"
+    log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name)"
 
     if [[ "$terminal_app" == "iTerm" ]] || [[ "$terminal_app" == "iTerm2" ]]; then
-        # iTerm2 - create new window
         if [[ "$use_tmux" == "true" ]]; then
-            osascript <<EOF
-tell application "iTerm"
-    activate
-    set newWindow to (create window with default profile)
-    tell current session of newWindow
-        if "$use_tmux" is "true" then
-            write text "cd '$project_path' && (tmux attach -t '$session_name' 2>/dev/null || tmux new-session -s '$session_name')"
-        else
-            write text "cd '$project_path'"
-        end if
+            osascript - "$project_path" "$session_name" <<'APPLESCRIPT'
+on run argv
+    set projectPath to item 1 of argv
+    set sessionName to item 2 of argv
+    tell application "iTerm"
+        activate
+        set newWindow to (create window with default profile)
+        tell current session of newWindow
+            write text "cd '" & projectPath & "' && (tmux attach -t '" & sessionName & "' 2>/dev/null || tmux new-session -s '" & sessionName & "')"
+        end tell
     end tell
-end tell
-EOF
+end run
+APPLESCRIPT
         else
-            osascript <<EOF
-tell application "iTerm"
-    activate
-    set newWindow to (create window with default profile)
-    tell current session of newWindow
-        write text "cd '$project_path'"
+            osascript - "$project_path" <<'APPLESCRIPT'
+on run argv
+    set projectPath to item 1 of argv
+    tell application "iTerm"
+        activate
+        set newWindow to (create window with default profile)
+        tell current session of newWindow
+            write text "cd '" & projectPath & "'"
+        end tell
     end tell
-end tell
-EOF
+end run
+APPLESCRIPT
         fi
     else
         # Terminal.app fallback
@@ -91,8 +89,7 @@ apps_launch_notes() {
     local project_config
     project_config=$(config_get_project "$project")
 
-    local vault
-    local folder
+    local vault folder
     vault=$(echo "$project_config" | jq -r '.notes.vault // empty')
     folder=$(echo "$project_config" | jq -r '.notes.folder // empty')
 
@@ -102,19 +99,28 @@ apps_launch_notes() {
 
     local note_name="${branch}.md"
     note_name=$(echo "$note_name" | tr '/' '-')
-    local note_path="${folder}/${note_name}"
 
-    # Find vault path and create note if it doesn't exist
-    local vault_base="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/${vault}"
-    if [[ ! -d "$vault_base" ]]; then
-        vault_base="$HOME/Documents/${vault}"
-    fi
+    # Find vault path - check common locations
+    local vault_base=""
+    local search_paths=(
+        "$HOME/Documents/$vault"
+        "$HOME/Documents/Obsidian Vault"
+        "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/$vault"
+        "$HOME/Obsidian/$vault"
+    )
 
-    if [[ -d "$vault_base" ]]; then
-        local full_note_path="${vault_base}/${folder}"
-        mkdir -p "$full_note_path"
+    for path in "${search_paths[@]}"; do
+        if [[ -d "$path" ]]; then
+            vault_base="$path"
+            break
+        fi
+    done
 
-        local note_file="${full_note_path}/${note_name}"
+    if [[ -n "$vault_base" ]]; then
+        local full_note_dir="${vault_base}/${folder}"
+        mkdir -p "$full_note_dir"
+
+        local note_file="${full_note_dir}/${note_name}"
         if [[ ! -f "$note_file" ]]; then
             log_info "Creating note: $note_file"
             cat > "$note_file" << EOF
@@ -135,10 +141,13 @@ apps_launch_notes() {
 - Started work on ${branch}
 EOF
         fi
-    fi
 
-    log_info "Opening Obsidian note: $note_path"
-    open "obsidian://open?vault=${vault}&file=${note_path}" &
+        local note_path="${folder}/${note_name}"
+        log_info "Opening Obsidian note: $note_path in vault $vault"
+        open "obsidian://open?vault=$(echo "$vault" | sed 's/ /%20/g')&file=$(echo "$note_path" | sed 's/ /%20/g')"
+    else
+        log_warn "Obsidian vault not found: $vault"
+    fi
 }
 
 apps_launch_urls() {
@@ -154,20 +163,19 @@ apps_launch_urls() {
         return 0
     fi
 
-    # Open Chrome with new window for this workspace
-    local workspace_name="${project}:${branch}"
-
     while IFS= read -r url; do
         if [[ -n "$url" ]]; then
-            log_info "Opening URL in new Chrome window: $url"
-            # Open in new Chrome window
-            osascript <<EOF
-tell application "Google Chrome"
-    activate
-    set newWindow to make new window
-    set URL of active tab of newWindow to "$url"
-end tell
-EOF
+            log_info "Opening URL: $url"
+            osascript - "$url" <<'APPLESCRIPT'
+on run argv
+    set theURL to item 1 of argv
+    tell application "Google Chrome"
+        activate
+        make new window
+        set URL of active tab of front window to theURL
+    end tell
+end run
+APPLESCRIPT
         fi
     done <<< "$urls"
 }
@@ -177,7 +185,10 @@ apps_launch_all() {
     local branch="$2"
 
     apps_launch_ide "$project"
+    sleep 1
     apps_launch_terminal "$project" "$branch"
+    sleep 1
     apps_launch_notes "$project" "$branch"
+    sleep 1
     apps_launch_urls "$project" "$branch"
 }
