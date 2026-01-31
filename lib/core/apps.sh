@@ -3,16 +3,24 @@
 
 source "$DS_ROOT/lib/core/config.sh"
 
+# URL encode a string
+urlencode() {
+    local string="$1"
+    python3 -c "import urllib.parse; print(urllib.parse.quote('$string', safe=''))"
+}
+
 # Get worktree path for a branch
+# worktree-cli creates worktrees as siblings with format: {repo-name}-{branch-name}
 get_worktree_path() {
     local project_path="$1"
     local branch="$2"
-    # worktree-cli creates worktrees in parent directory with branch name
     local parent_dir
     parent_dir=$(dirname "$project_path")
+    local repo_name
+    repo_name=$(basename "$project_path")
     local branch_dir
     branch_dir=$(echo "$branch" | tr '/' '-')
-    echo "${parent_dir}/${branch_dir}"
+    echo "${parent_dir}/${repo_name}-${branch_dir}"
 }
 
 apps_launch_ide() {
@@ -38,7 +46,10 @@ apps_launch_ide() {
 
     local full_path="$work_path/$ide_open"
     log_info "Opening $ide_app: $full_path"
-    open -a "$ide_app" "$full_path"
+    if ! open -a "$ide_app" "$full_path"; then
+        log_error "Failed to open $ide_app"
+        return 1
+    fi
 }
 
 apps_launch_terminal() {
@@ -72,7 +83,7 @@ apps_launch_terminal() {
 on run argv
     set sessionName to item 1 of argv
     tell application "iTerm"
-        set newWindow to (create window with default profile)
+        set newWindow to (create window with profile "Default")
         tell current session of newWindow
             write text "tmux attach -t '" & sessionName & "'"
         end tell
@@ -86,7 +97,7 @@ on run argv
     set workPath to item 1 of argv
     set sessionName to item 2 of argv
     tell application "iTerm"
-        set newWindow to (create window with default profile)
+        set newWindow to (create window with profile "Default")
         tell current session of newWindow
             write text "cd '" & workPath & "' && tmux new-session -s '" & sessionName & "'"
         end tell
@@ -99,7 +110,7 @@ APPLESCRIPT
 on run argv
     set workPath to item 1 of argv
     tell application "iTerm"
-        set newWindow to (create window with default profile)
+        set newWindow to (create window with profile "Default")
         tell current session of newWindow
             write text "cd '" & workPath & "'"
         end tell
@@ -108,15 +119,17 @@ end run
 APPLESCRIPT
         fi
     else
-        # Terminal.app fallback
+        # Terminal.app fallback - escape single quotes
+        local work_path_escaped="${work_path//\'/\'\\\'\'}"
+        local session_name_escaped="${session_name//\'/\'\\\'\'}"
         if [[ "$use_tmux" == "true" ]]; then
             if [[ "$session_exists" == "true" ]]; then
-                osascript -e "tell application \"Terminal\" to do script \"tmux attach -t '$session_name'\""
+                osascript -e "tell application \"Terminal\" to do script \"tmux attach -t '$session_name_escaped'\""
             else
-                osascript -e "tell application \"Terminal\" to do script \"cd '$work_path' && tmux new-session -s '$session_name'\""
+                osascript -e "tell application \"Terminal\" to do script \"cd '$work_path_escaped' && tmux new-session -s '$session_name_escaped'\""
             fi
         else
-            osascript -e "tell application \"Terminal\" to do script \"cd '$work_path'\""
+            osascript -e "tell application \"Terminal\" to do script \"cd '$work_path_escaped'\""
         fi
     fi
 }
@@ -185,7 +198,11 @@ EOF
 
         local note_path="${folder}/${note_name}"
         log_info "Opening Obsidian note: $note_path in vault $vault"
-        open "obsidian://open?vault=$(echo "$vault" | sed 's/ /%20/g')&file=$(echo "$note_path" | sed 's/ /%20/g')"
+        # Use proper URL encoding
+        local vault_encoded file_encoded
+        vault_encoded=$(urlencode "$vault")
+        file_encoded=$(urlencode "$note_path")
+        open "obsidian://open?vault=${vault_encoded}&file=${file_encoded}"
     else
         log_warn "Obsidian vault not found: $vault (specify notes.path in config)"
     fi
@@ -227,6 +244,11 @@ apps_launch_all() {
     local project_config
     project_config=$(config_get_project "$project")
 
+    if [[ "$project_config" == "null" ]]; then
+        log_error "Project not found: $project"
+        return 1
+    fi
+
     local project_path use_worktree base_branch work_path
     project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
     use_worktree=$(echo "$project_config" | jq -r '.useWorktree // false')
@@ -239,8 +261,13 @@ apps_launch_all() {
         # Check if worktree exists, if not create it
         if [[ ! -d "$work_path" ]]; then
             log_info "Creating worktree for $branch..."
-            (cd "$project_path" && wt new "$branch" --checkout) || {
-                log_error "Failed to create worktree. Is worktree-cli installed?"
+            if ! command -v wt &> /dev/null; then
+                log_error "worktree-cli (wt) not installed"
+                log_info "Install with: npm install -g @johnlindquist/worktree"
+                return 1
+            fi
+            (cd "$project_path" && wt new "$branch" --checkout --editor none) || {
+                log_error "Failed to create worktree"
                 return 1
             }
         fi

@@ -10,14 +10,22 @@ local function loadLayout()
   local file = io.open(configFile, "r")
   if not file then
     return {
-      ide = { x = 0, y = 0, w = 0.6, h = 1.0 },
-      terminal = { x = 0.6, y = 0, w = 0.4, h = 0.6 },
-      notes = { x = 0.6, y = 0.6, w = 0.4, h = 0.4 }
+      ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
+      notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
+      terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
     }
   end
 
   local content = file:read("*all")
   file:close()
+
+  if not content or content == "" then
+    return {
+      ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
+      notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
+      terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
+    }
+  end
 
   local ok, config = pcall(hs.json.decode, content)
   if ok and config and config.layout then
@@ -25,17 +33,21 @@ local function loadLayout()
   end
 
   return {
-    ide = { x = 0, y = 0, w = 0.6, h = 1.0 },
-    terminal = { x = 0.6, y = 0, w = 0.4, h = 0.6 },
-    notes = { x = 0.6, y = 0.6, w = 0.4, h = 0.4 }
+    ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
+    notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
+    terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
   }
 end
 
 -- Arrange windows for a workspace on a specific space
 function M.arrange(project, branch, spaceIndex)
-  -- Get all spaces
-  local allSpaces = hs.spaces.allSpaces()
   local mainScreen = hs.screen.mainScreen()
+  if not mainScreen then
+    hs.alert.show("No main screen found")
+    return false
+  end
+
+  local allSpaces = hs.spaces.allSpaces()
   local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
 
   -- Validate space index
@@ -44,13 +56,8 @@ function M.arrange(project, branch, spaceIndex)
     return false
   end
 
-  local targetSpace = screenSpaces[spaceIndex]
-
-  -- Focus the target space
-  hs.spaces.gotoSpace(targetSpace)
-
-  -- Give apps time to launch and settle
-  hs.timer.doAfter(2, function()
+  -- Give apps time to launch and settle, then arrange
+  hs.timer.doAfter(3, function()
     M.arrangeWindows(project)
   end)
 
@@ -58,8 +65,14 @@ function M.arrange(project, branch, spaceIndex)
 end
 
 -- Arrange windows based on layout config
+-- Uses orderedWindows() to get the most recently focused windows
 function M.arrangeWindows(project)
   local screen = hs.screen.mainScreen()
+  if not screen then
+    hs.alert.show("No main screen found")
+    return
+  end
+
   local frame = screen:frame()
   local layout = loadLayout()
 
@@ -68,34 +81,44 @@ function M.arrangeWindows(project)
   local terminalApps = { "iTerm2", "iTerm", "Terminal" }
   local notesApps = { "Obsidian" }
 
-  -- Find windows
+  -- Find windows using orderedWindows for most recent first
   local ideWindow = nil
   local terminalWindow = nil
   local notesWindow = nil
 
-  for _, win in ipairs(hs.window.allWindows()) do
-    local app = win:application()
-    if app then
-      local appName = app:name()
+  for _, win in ipairs(hs.window.orderedWindows()) do
+    -- Skip non-standard windows (fullscreen, etc.)
+    if win:isStandard() then
+      local app = win:application()
+      if app then
+        local appName = app:name()
 
-      for _, name in ipairs(ideApps) do
-        if appName == name then
-          ideWindow = win
-          break
+        -- Only assign if not already found (gets most recent)
+        if not ideWindow then
+          for _, name in ipairs(ideApps) do
+            if appName == name then
+              ideWindow = win
+              break
+            end
+          end
         end
-      end
 
-      for _, name in ipairs(terminalApps) do
-        if appName == name then
-          terminalWindow = win
-          break
+        if not terminalWindow then
+          for _, name in ipairs(terminalApps) do
+            if appName == name then
+              terminalWindow = win
+              break
+            end
+          end
         end
-      end
 
-      for _, name in ipairs(notesApps) do
-        if appName == name then
-          notesWindow = win
-          break
+        if not notesWindow then
+          for _, name in ipairs(notesApps) do
+            if appName == name then
+              notesWindow = win
+              break
+            end
+          end
         end
       end
     end
@@ -132,16 +155,22 @@ function M.arrangeWindows(project)
     })
   end
 
-  -- Focus IDE
+  -- Focus IDE last so it's on top
   if ideWindow then
     ideWindow:focus()
   end
+
+  hs.alert.show("Windows arranged")
 end
 
 -- Move window to specific space
 function M.moveToSpace(window, spaceIndex)
-  local allSpaces = hs.spaces.allSpaces()
   local mainScreen = hs.screen.mainScreen()
+  if not mainScreen then
+    return false
+  end
+
+  local allSpaces = hs.spaces.allSpaces()
   local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
 
   if spaceIndex <= #screenSpaces then
