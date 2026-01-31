@@ -43,34 +43,55 @@ apps_launch_terminal() {
     local session_name="${project}-${branch}"
     session_name=$(echo "$session_name" | tr '/' '-' | tr '.' '-')
 
-    # Git commands to checkout branch from latest base
-    local git_cmds="git fetch origin && git checkout $base_branch && git pull origin $base_branch && (git checkout $branch 2>/dev/null || git checkout -b $branch)"
-
     log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name, base=$base_branch)"
+
+    # Check if tmux session already exists
+    local session_exists="false"
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        session_exists="true"
+        log_info "Restoring existing tmux session: $session_name"
+    fi
+
+    # Git commands to checkout branch from latest base (only for new sessions)
+    local git_cmds="git fetch origin && git checkout $base_branch && git pull origin $base_branch && (git checkout $branch 2>/dev/null || git checkout -b $branch)"
 
     if [[ "$terminal_app" == "iTerm" ]] || [[ "$terminal_app" == "iTerm2" ]]; then
         if [[ "$use_tmux" == "true" ]]; then
-            osascript - "$project_path" "$session_name" "$git_cmds" <<'APPLESCRIPT'
+            if [[ "$session_exists" == "true" ]]; then
+                # Just attach to existing session
+                osascript - "$session_name" <<'APPLESCRIPT'
+on run argv
+    set sessionName to item 1 of argv
+    tell application "iTerm"
+        set newWindow to (create window with default profile)
+        tell current session of newWindow
+            write text "tmux attach -t '" & sessionName & "'"
+        end tell
+    end tell
+end run
+APPLESCRIPT
+            else
+                # Create new session, cd, then checkout
+                osascript - "$project_path" "$session_name" "$git_cmds" <<'APPLESCRIPT'
 on run argv
     set projectPath to item 1 of argv
     set sessionName to item 2 of argv
     set gitCmds to item 3 of argv
     tell application "iTerm"
-        activate
         set newWindow to (create window with default profile)
         tell current session of newWindow
-            write text "cd '" & projectPath & "' && " & gitCmds & " && (tmux attach -t '" & sessionName & "' 2>/dev/null || tmux new-session -s '" & sessionName & "')"
+            write text "cd '" & projectPath & "' && tmux new-session -s '" & sessionName & "' \\; send-keys '" & gitCmds & "' Enter"
         end tell
     end tell
 end run
 APPLESCRIPT
+            fi
         else
             osascript - "$project_path" "$git_cmds" <<'APPLESCRIPT'
 on run argv
     set projectPath to item 1 of argv
     set gitCmds to item 2 of argv
     tell application "iTerm"
-        activate
         set newWindow to (create window with default profile)
         tell current session of newWindow
             write text "cd '" & projectPath & "' && " & gitCmds
@@ -82,7 +103,11 @@ APPLESCRIPT
     else
         # Terminal.app fallback
         if [[ "$use_tmux" == "true" ]]; then
-            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && $git_cmds && (tmux attach -t '$session_name' 2>/dev/null || tmux new-session -s '$session_name')\""
+            if [[ "$session_exists" == "true" ]]; then
+                osascript -e "tell application \"Terminal\" to do script \"tmux attach -t '$session_name'\""
+            else
+                osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && tmux new-session -s '$session_name' \\\\; send-keys '$git_cmds' Enter\""
+            fi
         else
             osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && $git_cmds\""
         fi
