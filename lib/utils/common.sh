@@ -1,9 +1,9 @@
 #!/bin/bash
 # Common utilities for dreamspaces
 
-CONFIG_DIR="${HOME}/.config/dreamspaces"
-CONFIG_FILE="${CONFIG_DIR}/config.json"
-STATE_FILE="${CONFIG_DIR}/state.json"
+CONFIG_DIR="${CONFIG_DIR:-${HOME}/.config/dreamspaces}"
+CONFIG_FILE="${CONFIG_FILE:-${CONFIG_DIR}/config.json}"
+STATE_FILE="${STATE_FILE:-${CONFIG_DIR}/state.json}"
 
 # Colors for output
 RED='\033[0;31m'

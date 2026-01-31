@@ -30,7 +30,16 @@ if [[ -n "$SHELL_RC" ]]; then
         echo "" >> "$SHELL_RC"
         echo "# Dreamspaces" >> "$SHELL_RC"
         echo "$PATH_LINE" >> "$SHELL_RC"
-        echo "Added to PATH in $SHELL_RC"
+
+        # Add completion
+        if [[ "$SHELL_RC" == *"zshrc"* ]]; then
+            echo "fpath=($DS_ROOT/completions \$fpath)" >> "$SHELL_RC"
+            echo "autoload -Uz compinit && compinit" >> "$SHELL_RC"
+        else
+            echo "source $DS_ROOT/completions/ds.bash" >> "$SHELL_RC"
+        fi
+
+        echo "Added to PATH in $SHELL_RC (with completions)"
     fi
 else
     echo "Add this to your shell profile:"
