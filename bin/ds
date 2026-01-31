@@ -1,0 +1,49 @@
+#!/bin/bash
+set -e
+
+VERSION="0.1.0"
+DS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+source "$DS_ROOT/lib/utils/common.sh"
+
+case "${1:-}" in
+    setup)
+        source "$DS_ROOT/lib/commands/setup.sh"
+        ;;
+    open)
+        shift
+        source "$DS_ROOT/lib/commands/open.sh"
+        cmd_open "$@"
+        ;;
+    close)
+        source "$DS_ROOT/lib/commands/close.sh"
+        cmd_close
+        ;;
+    switch)
+        source "$DS_ROOT/lib/commands/switch.sh"
+        cmd_switch
+        ;;
+    list)
+        source "$DS_ROOT/lib/commands/list.sh"
+        cmd_list
+        ;;
+    config)
+        ensure_config_dir
+        if [[ ! -f "$CONFIG_FILE" ]]; then
+            log_error "Config file not found. Run 'ds setup' first."
+            exit 1
+        fi
+        ${EDITOR:-vim} "$CONFIG_FILE"
+        ;;
+    --version|-v)
+        echo "dreamspaces $VERSION"
+        ;;
+    --help|-h|"")
+        show_help
+        ;;
+    *)
+        log_error "Unknown command: $1"
+        show_help
+        exit 1
+        ;;
+esac

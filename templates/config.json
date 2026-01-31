@@ -1,0 +1,16 @@
+{
+  "version": "0.1",
+  "staticSpace": {
+    "apps": ["Slack", "Mail"]
+  },
+  "poolSize": 7,
+  "projects": {
+    "example-project": {
+      "path": "~/Projects/example-project",
+      "ide": { "app": "Cursor", "open": "." },
+      "terminal": { "tmux": true },
+      "notes": { "vault": "Obsidian Vault", "folder": "Projects/example/branches" },
+      "urls": []
+    }
+  }
+}
