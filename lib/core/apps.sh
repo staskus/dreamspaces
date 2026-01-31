@@ -34,40 +34,46 @@ apps_launch_terminal() {
     local project_config
     project_config=$(config_get_project "$project")
 
-    local use_tmux terminal_app project_path
+    local use_tmux terminal_app project_path base_branch
     use_tmux=$(echo "$project_config" | jq -r '.terminal.tmux // false')
     terminal_app=$(echo "$project_config" | jq -r '.terminal.app // "iTerm"')
     project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
+    base_branch=$(echo "$project_config" | jq -r '.baseBranch // "trunk"')
 
     local session_name="${project}-${branch}"
     session_name=$(echo "$session_name" | tr '/' '-' | tr '.' '-')
 
-    log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name)"
+    # Git commands to checkout branch from latest base
+    local git_cmds="git fetch origin && git checkout $base_branch && git pull origin $base_branch && (git checkout $branch 2>/dev/null || git checkout -b $branch)"
+
+    log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name, base=$base_branch)"
 
     if [[ "$terminal_app" == "iTerm" ]] || [[ "$terminal_app" == "iTerm2" ]]; then
         if [[ "$use_tmux" == "true" ]]; then
-            osascript - "$project_path" "$session_name" <<'APPLESCRIPT'
+            osascript - "$project_path" "$session_name" "$git_cmds" <<'APPLESCRIPT'
 on run argv
     set projectPath to item 1 of argv
     set sessionName to item 2 of argv
+    set gitCmds to item 3 of argv
     tell application "iTerm"
         activate
         set newWindow to (create window with default profile)
         tell current session of newWindow
-            write text "cd '" & projectPath & "' && (tmux attach -t '" & sessionName & "' 2>/dev/null || tmux new-session -s '" & sessionName & "')"
+            write text "cd '" & projectPath & "' && " & gitCmds & " && (tmux attach -t '" & sessionName & "' 2>/dev/null || tmux new-session -s '" & sessionName & "')"
         end tell
     end tell
 end run
 APPLESCRIPT
         else
-            osascript - "$project_path" <<'APPLESCRIPT'
+            osascript - "$project_path" "$git_cmds" <<'APPLESCRIPT'
 on run argv
     set projectPath to item 1 of argv
+    set gitCmds to item 2 of argv
     tell application "iTerm"
         activate
         set newWindow to (create window with default profile)
         tell current session of newWindow
-            write text "cd '" & projectPath & "'"
+            write text "cd '" & projectPath & "' && " & gitCmds
         end tell
     end tell
 end run
@@ -76,9 +82,9 @@ APPLESCRIPT
     else
         # Terminal.app fallback
         if [[ "$use_tmux" == "true" ]]; then
-            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && (tmux attach -t '$session_name' 2>/dev/null || tmux new-session -s '$session_name')\""
+            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && $git_cmds && (tmux attach -t '$session_name' 2>/dev/null || tmux new-session -s '$session_name')\""
         else
-            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path'\""
+            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && $git_cmds\""
         fi
     fi
 }
@@ -89,9 +95,10 @@ apps_launch_notes() {
     local project_config
     project_config=$(config_get_project "$project")
 
-    local vault folder
+    local vault folder vault_path
     vault=$(echo "$project_config" | jq -r '.notes.vault // empty')
     folder=$(echo "$project_config" | jq -r '.notes.folder // empty')
+    vault_path=$(echo "$project_config" | jq -r '.notes.path // empty' | sed "s|^~|$HOME|")
 
     if [[ -z "$vault" ]]; then
         return 0
@@ -100,21 +107,23 @@ apps_launch_notes() {
     local note_name="${branch}.md"
     note_name=$(echo "$note_name" | tr '/' '-')
 
-    # Find vault path - check common locations
+    # Use explicit path if provided, otherwise search common locations
     local vault_base=""
-    local search_paths=(
-        "$HOME/Documents/$vault"
-        "$HOME/Documents/Obsidian Vault"
-        "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/$vault"
-        "$HOME/Obsidian/$vault"
-    )
-
-    for path in "${search_paths[@]}"; do
-        if [[ -d "$path" ]]; then
-            vault_base="$path"
-            break
-        fi
-    done
+    if [[ -n "$vault_path" ]] && [[ -d "$vault_path" ]]; then
+        vault_base="$vault_path"
+    else
+        local search_paths=(
+            "$HOME/Documents/$vault"
+            "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/$vault"
+            "$HOME/Obsidian/$vault"
+        )
+        for path in "${search_paths[@]}"; do
+            if [[ -d "$path" ]]; then
+                vault_base="$path"
+                break
+            fi
+        done
+    fi
 
     if [[ -n "$vault_base" ]]; then
         local full_note_dir="${vault_base}/${folder}"
@@ -146,7 +155,7 @@ EOF
         log_info "Opening Obsidian note: $note_path in vault $vault"
         open "obsidian://open?vault=$(echo "$vault" | sed 's/ /%20/g')&file=$(echo "$note_path" | sed 's/ /%20/g')"
     else
-        log_warn "Obsidian vault not found: $vault"
+        log_warn "Obsidian vault not found: $vault (specify notes.path in config)"
     fi
 }
 
