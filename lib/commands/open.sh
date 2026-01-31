@@ -46,9 +46,12 @@ cmd_open() {
     # Launch apps
     apps_launch_all "$project" "$branch"
 
-    # Notify Hammerspoon to arrange windows
+    # Notify Hammerspoon to reload state and arrange windows
     if command -v hs &> /dev/null; then
-        hs -c "dreamspaces.arrange('$project', '$branch', $space_index)"
+        log_info "Arranging windows via Hammerspoon..."
+        hs -c "dreamspaces.reload(); dreamspaces.arrange('$project', '$branch', $space_index)"
+    else
+        log_warn "Hammerspoon CLI not available - windows won't be arranged"
     fi
 
     log_success "Workspace opened: ${project}:${branch} on space $space_index"
