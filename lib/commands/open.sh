@@ -5,6 +5,26 @@ source "$DS_ROOT/lib/core/config.sh"
 source "$DS_ROOT/lib/core/spaces.sh"
 source "$DS_ROOT/lib/core/apps.sh"
 
+check_hammerspoon_accessibility() {
+    if ! command -v hs &> /dev/null; then
+        log_error "Hammerspoon CLI (hs) not available"
+        log_info "Run 'ds setup' and ensure Hammerspoon has accessibility permissions"
+        return 1
+    fi
+
+    # Check if Hammerspoon has accessibility permissions
+    local has_access
+    has_access=$(hs -c "return hs.accessibilityState()" 2>/dev/null)
+    if [[ "$has_access" != "true" ]]; then
+        log_error "Hammerspoon does not have accessibility permissions"
+        log_info "Go to System Settings > Privacy & Security > Accessibility"
+        log_info "Enable Hammerspoon in the list"
+        return 1
+    fi
+
+    return 0
+}
+
 cmd_open() {
     local project="${1:-}"
     local branch="${2:-main}"
@@ -16,6 +36,11 @@ cmd_open() {
         config_list_projects | while read -r p; do
             echo "  - $p"
         done
+        exit 1
+    fi
+
+    # Check Hammerspoon accessibility
+    if ! check_hammerspoon_accessibility; then
         exit 1
     fi
 
@@ -46,13 +71,9 @@ cmd_open() {
     # Launch apps
     apps_launch_all "$project" "$branch"
 
-    # Notify Hammerspoon to reload state and arrange windows
-    if command -v hs &> /dev/null; then
-        log_info "Arranging windows via Hammerspoon..."
-        hs -c "dreamspaces.reload(); dreamspaces.arrange('$project', '$branch', $space_index)"
-    else
-        log_warn "Hammerspoon CLI not available - windows won't be arranged"
-    fi
+    # Notify Hammerspoon to reload state and arrange windows (without switching spaces)
+    log_info "Arranging windows via Hammerspoon..."
+    hs -c "dreamspaces.reload(); dreamspaces.arrangeWindows('$project')"
 
-    log_success "Workspace opened: ${project}:${branch} on space $space_index"
+    log_success "Workspace opened: ${project}:${branch}"
 }

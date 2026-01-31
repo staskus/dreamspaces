@@ -7,9 +7,14 @@ local spaces = require("dreamspaces.spaces")
 local picker = require("dreamspaces.picker")
 local state = require("dreamspaces.state")
 
--- Arrange windows for a workspace
+-- Arrange windows for a workspace (with space switching)
 function M.arrange(project, branch, spaceIndex)
   spaces.arrange(project, branch, spaceIndex)
+end
+
+-- Arrange windows without switching spaces
+function M.arrangeWindows(project)
+  spaces.arrangeWindows(project)
 end
 
 -- Show workspace picker

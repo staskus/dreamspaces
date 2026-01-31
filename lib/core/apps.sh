@@ -3,8 +3,22 @@
 
 source "$DS_ROOT/lib/core/config.sh"
 
+# Get worktree path for a branch
+get_worktree_path() {
+    local project_path="$1"
+    local branch="$2"
+    # worktree-cli creates worktrees in parent directory with branch name
+    local parent_dir
+    parent_dir=$(dirname "$project_path")
+    local branch_dir
+    branch_dir=$(echo "$branch" | tr '/' '-')
+    echo "${parent_dir}/${branch_dir}"
+}
+
 apps_launch_ide() {
     local project="$1"
+    local branch="$2"
+    local work_path="$3"
     local project_config
     project_config=$(config_get_project "$project")
 
@@ -13,17 +27,16 @@ apps_launch_ide() {
         return 1
     fi
 
-    local ide_app ide_open project_path
+    local ide_app ide_open
     ide_app=$(echo "$project_config" | jq -r '.ide.app // "Cursor"')
     ide_open=$(echo "$project_config" | jq -r '.ide.open // "."')
-    project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
 
-    if [[ ! -d "$project_path" ]]; then
-        log_error "Project path not found: $project_path"
+    if [[ ! -d "$work_path" ]]; then
+        log_error "Work path not found: $work_path"
         return 1
     fi
 
-    local full_path="$project_path/$ide_open"
+    local full_path="$work_path/$ide_open"
     log_info "Opening $ide_app: $full_path"
     open -a "$ide_app" "$full_path"
 }
@@ -31,19 +44,18 @@ apps_launch_ide() {
 apps_launch_terminal() {
     local project="$1"
     local branch="$2"
+    local work_path="$3"
     local project_config
     project_config=$(config_get_project "$project")
 
-    local use_tmux terminal_app project_path base_branch
+    local use_tmux terminal_app
     use_tmux=$(echo "$project_config" | jq -r '.terminal.tmux // false')
     terminal_app=$(echo "$project_config" | jq -r '.terminal.app // "iTerm"')
-    project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
-    base_branch=$(echo "$project_config" | jq -r '.baseBranch // "trunk"')
 
     local session_name="${project}-${branch}"
     session_name=$(echo "$session_name" | tr '/' '-' | tr '.' '-')
 
-    log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name, base=$base_branch)"
+    log_info "Opening $terminal_app (tmux=$use_tmux, session=$session_name)"
 
     # Check if tmux session already exists
     local session_exists="false"
@@ -52,13 +64,10 @@ apps_launch_terminal() {
         log_info "Restoring existing tmux session: $session_name"
     fi
 
-    # Git commands to checkout branch from latest base (only for new sessions)
-    local git_cmds="git fetch origin && git checkout $base_branch && git pull origin $base_branch && (git checkout $branch 2>/dev/null || git checkout -b $branch)"
-
     if [[ "$terminal_app" == "iTerm" ]] || [[ "$terminal_app" == "iTerm2" ]]; then
         if [[ "$use_tmux" == "true" ]]; then
             if [[ "$session_exists" == "true" ]]; then
-                # Just attach to existing session
+                # Just attach to existing session in new window
                 osascript - "$session_name" <<'APPLESCRIPT'
 on run argv
     set sessionName to item 1 of argv
@@ -71,30 +80,28 @@ on run argv
 end run
 APPLESCRIPT
             else
-                # Create new session, cd, then checkout
-                osascript - "$project_path" "$session_name" "$git_cmds" <<'APPLESCRIPT'
+                # Create new tmux session in work path
+                osascript - "$work_path" "$session_name" <<'APPLESCRIPT'
 on run argv
-    set projectPath to item 1 of argv
+    set workPath to item 1 of argv
     set sessionName to item 2 of argv
-    set gitCmds to item 3 of argv
     tell application "iTerm"
         set newWindow to (create window with default profile)
         tell current session of newWindow
-            write text "cd '" & projectPath & "' && tmux new-session -s '" & sessionName & "' \\; send-keys '" & gitCmds & "' Enter"
+            write text "cd '" & workPath & "' && tmux new-session -s '" & sessionName & "'"
         end tell
     end tell
 end run
 APPLESCRIPT
             fi
         else
-            osascript - "$project_path" "$git_cmds" <<'APPLESCRIPT'
+            osascript - "$work_path" <<'APPLESCRIPT'
 on run argv
-    set projectPath to item 1 of argv
-    set gitCmds to item 2 of argv
+    set workPath to item 1 of argv
     tell application "iTerm"
         set newWindow to (create window with default profile)
         tell current session of newWindow
-            write text "cd '" & projectPath & "' && " & gitCmds
+            write text "cd '" & workPath & "'"
         end tell
     end tell
 end run
@@ -106,10 +113,10 @@ APPLESCRIPT
             if [[ "$session_exists" == "true" ]]; then
                 osascript -e "tell application \"Terminal\" to do script \"tmux attach -t '$session_name'\""
             else
-                osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && tmux new-session -s '$session_name' \\\\; send-keys '$git_cmds' Enter\""
+                osascript -e "tell application \"Terminal\" to do script \"cd '$work_path' && tmux new-session -s '$session_name'\""
             fi
         else
-            osascript -e "tell application \"Terminal\" to do script \"cd '$project_path' && $git_cmds\""
+            osascript -e "tell application \"Terminal\" to do script \"cd '$work_path'\""
         fi
     fi
 }
@@ -217,10 +224,35 @@ APPLESCRIPT
 apps_launch_all() {
     local project="$1"
     local branch="$2"
+    local project_config
+    project_config=$(config_get_project "$project")
 
-    apps_launch_ide "$project"
+    local project_path use_worktree base_branch work_path
+    project_path=$(echo "$project_config" | jq -r '.path' | sed "s|^~|$HOME|")
+    use_worktree=$(echo "$project_config" | jq -r '.useWorktree // false')
+    base_branch=$(echo "$project_config" | jq -r '.baseBranch // "trunk"')
+
+    # Determine working path
+    if [[ "$use_worktree" == "true" ]]; then
+        work_path=$(get_worktree_path "$project_path" "$branch")
+
+        # Check if worktree exists, if not create it
+        if [[ ! -d "$work_path" ]]; then
+            log_info "Creating worktree for $branch..."
+            (cd "$project_path" && wt new "$branch" --checkout) || {
+                log_error "Failed to create worktree. Is worktree-cli installed?"
+                return 1
+            }
+        fi
+    else
+        work_path="$project_path"
+    fi
+
+    log_info "Working path: $work_path"
+
+    apps_launch_ide "$project" "$branch" "$work_path"
     sleep 1
-    apps_launch_terminal "$project" "$branch"
+    apps_launch_terminal "$project" "$branch" "$work_path"
     sleep 1
     apps_launch_notes "$project" "$branch"
     sleep 1
