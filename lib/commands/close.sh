@@ -5,10 +5,19 @@ source "$DS_ROOT/lib/core/state.sh"
 source "$DS_ROOT/lib/core/spaces.sh"
 
 cmd_close() {
-    # Get current space from Hammerspoon
-    local current_space=""
+    # Get current space INDEX from Hammerspoon (convert space ID to index)
+    local current_space_index=""
     if command -v hs &> /dev/null; then
-        current_space=$(hs -c "return hs.spaces.focusedSpace()" 2>/dev/null)
+        current_space_index=$(hs -c "
+            local focusedSpace = hs.spaces.focusedSpace()
+            local mainScreen = hs.screen.mainScreen()
+            if not mainScreen then return '' end
+            local spaces = hs.spaces.allSpaces()[mainScreen:getUUID()] or {}
+            for i, spaceId in ipairs(spaces) do
+                if spaceId == focusedSpace then return i end
+            end
+            return ''
+        " 2>/dev/null)
     fi
 
     # Find workspace on current space
@@ -21,7 +30,7 @@ cmd_close() {
     fi
 
     # If we can't determine current space, ask user to specify
-    if [[ -z "$current_space" ]]; then
+    if [[ -z "$current_space_index" ]]; then
         log_info "Active workspaces:"
         state_list_workspaces | while read -r ws; do
             local info
@@ -42,7 +51,7 @@ cmd_close() {
         info=$(state_get ".workspaces[\"$ws\"]")
         local space
         space=$(echo "$info" | jq -r '.space')
-        if [[ "$space" == "$current_space" ]]; then
+        if [[ "$space" == "$current_space_index" ]]; then
             found="$ws"
             break
         fi
