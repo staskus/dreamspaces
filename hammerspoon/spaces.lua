@@ -3,6 +3,34 @@ local M = {}
 
 local hs = _G.hs
 
+local configFile = os.getenv("HOME") .. "/.config/dreamspaces/config.json"
+
+-- Load layout from config
+local function loadLayout()
+  local file = io.open(configFile, "r")
+  if not file then
+    return {
+      ide = { x = 0, y = 0, w = 0.6, h = 1.0 },
+      terminal = { x = 0.6, y = 0, w = 0.4, h = 0.6 },
+      notes = { x = 0.6, y = 0.6, w = 0.4, h = 0.4 }
+    }
+  end
+
+  local content = file:read("*all")
+  file:close()
+
+  local ok, config = pcall(hs.json.decode, content)
+  if ok and config and config.layout then
+    return config.layout
+  end
+
+  return {
+    ide = { x = 0, y = 0, w = 0.6, h = 1.0 },
+    terminal = { x = 0.6, y = 0, w = 0.4, h = 0.6 },
+    notes = { x = 0.6, y = 0.6, w = 0.4, h = 0.4 }
+  }
+end
+
 -- Arrange windows for a workspace on a specific space
 function M.arrange(project, branch, spaceIndex)
   -- Get all spaces
@@ -22,19 +50,25 @@ function M.arrange(project, branch, spaceIndex)
   hs.spaces.gotoSpace(targetSpace)
 
   -- Give apps time to launch and settle
-  hs.timer.doAfter(1, function()
+  hs.timer.doAfter(2, function()
     M.arrangeWindows(project)
   end)
 
   return true
 end
 
--- Arrange windows based on project config
+-- Arrange windows based on layout config
 function M.arrangeWindows(project)
   local screen = hs.screen.mainScreen()
   local frame = screen:frame()
+  local layout = loadLayout()
 
-  -- Find windows by app
+  -- App name mappings
+  local ideApps = { "Xcode", "Cursor", "Visual Studio Code", "VSCode", "Code" }
+  local terminalApps = { "iTerm2", "iTerm", "Terminal" }
+  local notesApps = { "Obsidian" }
+
+  -- Find windows
   local ideWindow = nil
   local terminalWindow = nil
   local notesWindow = nil
@@ -43,43 +77,64 @@ function M.arrangeWindows(project)
     local app = win:application()
     if app then
       local appName = app:name()
-      if appName == "Cursor" or appName == "Xcode" or appName == "VSCode" then
-        ideWindow = win
-      elseif appName == "Terminal" or appName == "iTerm2" then
-        terminalWindow = win
-      elseif appName == "Obsidian" then
-        notesWindow = win
+
+      for _, name in ipairs(ideApps) do
+        if appName == name then
+          ideWindow = win
+          break
+        end
+      end
+
+      for _, name in ipairs(terminalApps) do
+        if appName == name then
+          terminalWindow = win
+          break
+        end
+      end
+
+      for _, name in ipairs(notesApps) do
+        if appName == name then
+          notesWindow = win
+          break
+        end
       end
     end
   end
 
-  -- Default layout: IDE left 60%, terminal right 40%
-  if ideWindow then
+  -- Apply layout
+  if ideWindow and layout.ide then
+    local l = layout.ide
     ideWindow:setFrame({
-      x = frame.x,
-      y = frame.y,
-      w = frame.w * 0.6,
-      h = frame.h
+      x = frame.x + frame.w * l.x,
+      y = frame.y + frame.h * l.y,
+      w = frame.w * l.w,
+      h = frame.h * l.h
     })
-    ideWindow:focus()
   end
 
-  if terminalWindow then
+  if terminalWindow and layout.terminal then
+    local l = layout.terminal
     terminalWindow:setFrame({
-      x = frame.x + frame.w * 0.6,
-      y = frame.y,
-      w = frame.w * 0.4,
-      h = frame.h * 0.6
+      x = frame.x + frame.w * l.x,
+      y = frame.y + frame.h * l.y,
+      w = frame.w * l.w,
+      h = frame.h * l.h
     })
   end
 
-  if notesWindow then
+  if notesWindow and layout.notes then
+    local l = layout.notes
     notesWindow:setFrame({
-      x = frame.x + frame.w * 0.6,
-      y = frame.y + frame.h * 0.6,
-      w = frame.w * 0.4,
-      h = frame.h * 0.4
+      x = frame.x + frame.w * l.x,
+      y = frame.y + frame.h * l.y,
+      w = frame.w * l.w,
+      h = frame.h * l.h
     })
+  end
+
+  -- Focus IDE
+  if ideWindow then
+    ideWindow:focus()
   end
 end
 
