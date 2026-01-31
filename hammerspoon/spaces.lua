@@ -39,20 +39,66 @@ local function loadLayout()
   }
 end
 
--- Arrange windows for a workspace on a specific space
-function M.arrange(project, branch, spaceIndex)
+-- Get screen spaces info
+function M.getScreenSpaces()
   local mainScreen = hs.screen.mainScreen()
   if not mainScreen then
-    hs.alert.show("No main screen found")
-    return false
+    return nil, nil, "No main screen"
   end
 
   local allSpaces = hs.spaces.allSpaces()
-  local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
+  local screenUUID = mainScreen:getUUID()
+  local screenSpaces = allSpaces[screenUUID] or {}
 
-  -- Validate space index
-  if spaceIndex > #screenSpaces then
-    hs.alert.show("Space " .. spaceIndex .. " does not exist")
+  return screenSpaces, screenUUID, nil
+end
+
+-- Ensure we have enough spaces, create if needed
+function M.ensureSpaceExists(spaceIndex)
+  local screenSpaces, screenUUID, err = M.getScreenSpaces()
+  if err then
+    hs.alert.show(err)
+    return false
+  end
+
+  local currentCount = #screenSpaces
+
+  -- Create spaces if needed
+  while currentCount < spaceIndex do
+    hs.spaces.addSpaceToScreen(screenUUID)
+    currentCount = currentCount + 1
+    hs.printf("Dreamspaces: created space %d", currentCount)
+  end
+
+  return true
+end
+
+-- Switch to a space by index
+function M.gotoSpace(spaceIndex)
+  -- Ensure space exists first
+  if not M.ensureSpaceExists(spaceIndex) then
+    return false
+  end
+
+  local screenSpaces, _, err = M.getScreenSpaces()
+  if err then
+    hs.alert.show(err)
+    return false
+  end
+
+  if spaceIndex <= #screenSpaces then
+    local targetSpace = screenSpaces[spaceIndex]
+    hs.spaces.gotoSpace(targetSpace)
+    return true
+  end
+
+  return false
+end
+
+-- Arrange windows for a workspace on a specific space
+function M.arrange(project, branch, spaceIndex)
+  -- Ensure space exists
+  if not M.ensureSpaceExists(spaceIndex) then
     return false
   end
 
@@ -165,13 +211,14 @@ end
 
 -- Move window to specific space
 function M.moveToSpace(window, spaceIndex)
-  local mainScreen = hs.screen.mainScreen()
-  if not mainScreen then
+  if not M.ensureSpaceExists(spaceIndex) then
     return false
   end
 
-  local allSpaces = hs.spaces.allSpaces()
-  local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
+  local screenSpaces, _, err = M.getScreenSpaces()
+  if err then
+    return false
+  end
 
   if spaceIndex <= #screenSpaces then
     hs.spaces.moveWindowToSpace(window, screenSpaces[spaceIndex])

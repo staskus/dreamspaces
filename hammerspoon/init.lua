@@ -43,24 +43,11 @@ function M.switchToWorkspace(workspace)
   local spaceIndex = workspace.space
   local project = workspace.project
 
-  -- Get all spaces
-  local mainScreen = hs.screen.mainScreen()
-  if not mainScreen then
-    hs.alert.show("No main screen")
+  -- Use spaces module which ensures space exists
+  if not spaces.gotoSpace(spaceIndex) then
+    hs.alert.show("Failed to switch to space " .. spaceIndex)
     return false
   end
-
-  local allSpaces = hs.spaces.allSpaces()
-  local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
-
-  if spaceIndex > #screenSpaces then
-    hs.alert.show("Space " .. spaceIndex .. " does not exist")
-    return false
-  end
-
-  -- Switch to the space
-  local targetSpace = screenSpaces[spaceIndex]
-  hs.spaces.gotoSpace(targetSpace)
 
   -- Arrange windows after a short delay
   hs.timer.doAfter(0.5, function()

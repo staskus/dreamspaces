@@ -77,12 +77,17 @@ cmd_open() {
     fi
     log_success "Claimed space: $space_index"
 
+    # Ensure macOS space exists and switch to it
+    log_info "Setting up space $space_index..."
+    hs -c "require('dreamspaces.spaces').gotoSpace($space_index)"
+    sleep 1
+
     # Launch apps
     apps_launch_all "$project" "$branch"
 
-    # Notify Hammerspoon to reload state and arrange windows (without switching spaces)
-    log_info "Arranging windows via Hammerspoon..."
-    hs -c "dreamspaces.reload(); dreamspaces.arrangeWindows('$project')"
+    # Arrange windows after apps launch
+    log_info "Arranging windows..."
+    hs -c "dreamspaces.reload(); dreamspaces.arrange('$project', '$branch', $space_index)"
 
-    log_success "Workspace opened: ${project}:${branch}"
+    log_success "Workspace opened: ${project}:${branch} on space $space_index"
 }
