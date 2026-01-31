@@ -16,10 +16,19 @@ check_hammerspoon_accessibility() {
     local has_access
     has_access=$(hs -c "return hs.accessibilityState()" 2>/dev/null)
     if [[ "$has_access" != "true" ]]; then
-        log_error "Hammerspoon does not have accessibility permissions"
-        log_info "Go to System Settings > Privacy & Security > Accessibility"
-        log_info "Enable Hammerspoon in the list"
-        return 1
+        log_warn "Hammerspoon accessibility issue - restarting..."
+        pkill -x Hammerspoon
+        sleep 1
+        open -a Hammerspoon
+        sleep 2
+
+        # Check again after restart
+        has_access=$(hs -c "return hs.accessibilityState()" 2>/dev/null)
+        if [[ "$has_access" != "true" ]]; then
+            log_error "Hammerspoon does not have accessibility permissions"
+            log_info "Enable in: System Settings > Privacy & Security > Accessibility"
+            return 1
+        fi
     fi
 
     return 0
