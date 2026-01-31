@@ -38,8 +38,42 @@ local function setupHotkeys()
   end
 end
 
--- Show switch picker with restore functionality
+-- Switch to a workspace's space and arrange windows (no app launching)
+function M.switchToWorkspace(workspace)
+  local spaceIndex = workspace.space
+  local project = workspace.project
+
+  -- Get all spaces
+  local mainScreen = hs.screen.mainScreen()
+  if not mainScreen then
+    hs.alert.show("No main screen")
+    return false
+  end
+
+  local allSpaces = hs.spaces.allSpaces()
+  local screenSpaces = allSpaces[mainScreen:getUUID()] or {}
+
+  if spaceIndex > #screenSpaces then
+    hs.alert.show("Space " .. spaceIndex .. " does not exist")
+    return false
+  end
+
+  -- Switch to the space
+  local targetSpace = screenSpaces[spaceIndex]
+  hs.spaces.gotoSpace(targetSpace)
+
+  -- Arrange windows after a short delay
+  hs.timer.doAfter(0.5, function()
+    M.arrangeWindows(project)
+  end)
+
+  hs.alert.show(project .. ":" .. workspace.branch)
+  return true
+end
+
+-- Show switch picker - just switches space, doesn't re-launch apps
 function M.showSwitchPicker()
+  state.reload()
   local workspaces = state.listWorkspaces()
 
   if #workspaces == 0 then
@@ -58,20 +92,7 @@ function M.showSwitchPicker()
 
   local chooser = hs.chooser.new(function(choice)
     if choice then
-      -- Run ds switch restore in background
-      local project = choice.workspace.project
-      local branch = choice.workspace.branch
-      local dsPath = os.getenv("HOME") .. "/Projects/Dreamspaces/bin/ds"
-
-      -- Use hs.task to run ds open which handles restore
-      hs.task.new("/bin/bash", function(exitCode, stdOut, stdErr)
-        if exitCode == 0 then
-          hs.alert.show("Switched to " .. project .. ":" .. branch)
-        else
-          hs.alert.show("Switch failed")
-          hs.printf("ds switch error: %s", stdErr)
-        end
-      end, {"-c", dsPath .. " open " .. project .. " " .. branch}):start()
+      M.switchToWorkspace(choice.workspace)
     end
   end)
 

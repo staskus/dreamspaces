@@ -3,26 +3,6 @@
 
 source "$DS_ROOT/lib/core/state.sh"
 source "$DS_ROOT/lib/core/config.sh"
-source "$DS_ROOT/lib/core/apps.sh"
-
-restore_workspace() {
-    local workspace_key="$1"
-    local project branch
-
-    project=$(echo "$workspace_key" | cut -d: -f1)
-    branch=$(echo "$workspace_key" | cut -d: -f2-)
-
-    log_info "Restoring workspace: $project:$branch"
-
-    # Re-launch apps (will skip if already running for tmux sessions)
-    apps_launch_all "$project" "$branch"
-
-    # Re-arrange windows
-    sleep 2
-    if command -v hs &> /dev/null; then
-        hs -c "dreamspaces.reload(); dreamspaces.arrangeWindows('$project')"
-    fi
-}
 
 cmd_switch() {
     local workspaces
@@ -34,13 +14,13 @@ cmd_switch() {
         return 0
     fi
 
-    # If Hammerspoon is available and has picker, use it
+    # Use Hammerspoon picker if available (better UX)
     if command -v hs &> /dev/null; then
-        # Use CLI picker instead since HS picker doesn't restore apps
-        :
+        hs -c "dreamspaces.showSwitchPicker()"
+        return 0
     fi
 
-    # List workspaces and let user choose
+    # Fallback: CLI picker
     log_info "Active workspaces:"
     local i=1
     local ws_array=()
@@ -59,7 +39,21 @@ cmd_switch() {
 
     if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice < i)); then
         local selected="${ws_array[$((choice-1))]}"
-        restore_workspace "$selected"
+        local info project branch space
+        info=$(state_get ".workspaces[\"$selected\"]")
+        project=$(echo "$info" | jq -r '.project')
+        space=$(echo "$info" | jq -r '.space')
+
+        log_info "Switching to $selected (space $space)..."
+
+        # Use Hammerspoon to switch space and arrange
+        if command -v hs &> /dev/null; then
+            hs -c "dreamspaces.reload()"
+            hs -c "hs.spaces.gotoSpace(hs.spaces.allSpaces()[hs.screen.mainScreen():getUUID()][$space])"
+            sleep 0.5
+            hs -c "dreamspaces.arrangeWindows('$project')"
+        fi
+
         log_success "Switched to $selected"
     else
         log_error "Invalid selection"
