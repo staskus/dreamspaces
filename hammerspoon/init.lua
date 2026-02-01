@@ -322,8 +322,22 @@ function M.list()
   return state.listWorkspaces()
 end
 
--- Initialize
-setupHotkeys()
+-- Initialize on load
+local function init()
+  -- Setup hotkeys
+  setupHotkeys()
+
+  -- Validate and cleanup stale state (e.g., after reboot)
+  state.reload()
+  local cleaned = state.cleanup()
+  if cleaned > 0 then
+    hs.printf("Dreamspaces: cleaned up %d orphaned workspaces on init", cleaned)
+  end
+
+  hs.printf("Dreamspaces: initialized")
+end
+
+init()
 
 -- Make globally available
 _G.dreamspaces = M

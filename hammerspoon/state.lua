@@ -5,10 +5,21 @@ local hs = _G.hs
 local stateFile = os.getenv("HOME") .. "/.config/dreamspaces/state.json"
 local cachedState = nil
 
+-- Get system boot time to detect reboots
+local function getBootTime()
+  local handle = io.popen("sysctl -n kern.boottime 2>/dev/null | awk -F'[= ,]' '{print $4}'")
+  if handle then
+    local result = handle:read("*a")
+    handle:close()
+    return tonumber(result) or 0
+  end
+  return 0
+end
+
 function M.reload()
   local file = io.open(stateFile, "r")
   if not file then
-    cachedState = { version = 2, workspaces = {} }
+    cachedState = { version = 2, workspaces = {}, bootTime = getBootTime() }
     return cachedState
   end
 
@@ -16,19 +27,32 @@ function M.reload()
   file:close()
 
   if not content or content == "" then
-    cachedState = { version = 2, workspaces = {} }
+    cachedState = { version = 2, workspaces = {}, bootTime = getBootTime() }
     return cachedState
   end
 
   local ok, result = pcall(hs.json.decode, content)
   if ok and result then
     cachedState = result
+
+    -- Check if system was rebooted - clear all workspaces (space IDs are invalid)
+    local currentBootTime = getBootTime()
+    if cachedState.bootTime and cachedState.bootTime ~= currentBootTime then
+      hs.printf("Dreamspaces: system rebooted, clearing stale workspaces")
+      cachedState.workspaces = {}
+      cachedState.bootTime = currentBootTime
+      M.save()
+    elseif not cachedState.bootTime then
+      cachedState.bootTime = currentBootTime
+      M.save()
+    end
+
     -- Migrate v1 state (space indexes) to v2 (space IDs)
     if not result.version or result.version < 2 then
       M.migrateToSpaceIds()
     end
   else
-    cachedState = { version = 2, workspaces = {} }
+    cachedState = { version = 2, workspaces = {}, bootTime = getBootTime() }
   end
 
   return cachedState

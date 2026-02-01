@@ -40,6 +40,8 @@ Commands:
   close              Close current workspace
   switch             Switch between active workspaces
   list               List active workspaces
+  doctor             Check system health and diagnose issues
+  cleanup            Remove orphaned workspace entries
   config             Open config file in editor
 
 Options:

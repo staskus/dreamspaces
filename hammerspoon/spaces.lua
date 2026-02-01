@@ -231,7 +231,7 @@ function M.closeWindowsOnSpace(spaceId, appNames)
   return closed
 end
 
--- Arrange windows on current space
+-- Arrange windows on current space (only windows ON this space)
 function M.arrangeWindows(project)
   local screen = hs.screen.mainScreen()
   if not screen then
@@ -250,8 +250,17 @@ function M.arrangeWindows(project)
   local terminalWindow = nil
   local notesWindow = nil
 
+  -- Get current space ID and only look at windows on THIS space
+  local currentSpaceId = hs.spaces.focusedSpace()
+  local windowIdsOnSpace = hs.spaces.windowsForSpace(currentSpaceId) or {}
+  local windowsOnSpace = {}
+  for _, winId in ipairs(windowIdsOnSpace) do
+    windowsOnSpace[winId] = true
+  end
+
   for _, win in ipairs(hs.window.orderedWindows()) do
-    if win:isStandard() then
+    -- Only consider windows on the current space
+    if win:isStandard() and windowsOnSpace[win:id()] then
       local app = win:application()
       if app then
         local appName = app:name()

@@ -27,6 +27,19 @@ case "${1:-}" in
         source "$DS_ROOT/lib/commands/list.sh"
         cmd_list
         ;;
+    doctor)
+        source "$DS_ROOT/lib/commands/doctor.sh"
+        cmd_doctor
+        ;;
+    cleanup)
+        log_info "Cleaning up orphaned workspaces..."
+        result=$(hs -c "local state = require('dreamspaces.state'); state.reload(); local removed = state.cleanup(); return removed" 2>/dev/null)
+        if [[ -n "$result" ]] && [[ "$result" != "0" ]]; then
+            log_success "Removed $result orphaned workspace(s)"
+        else
+            log_success "No orphaned workspaces found"
+        fi
+        ;;
     config)
         ensure_config_dir
         if [[ ! -f "$CONFIG_FILE" ]]; then
