@@ -142,7 +142,7 @@ Dreamspaces is made possible by these open source projects:
 Dreamspaces is designed to work with:
 - **Xcode / Cursor / VS Code** - IDE window management
 - **iTerm2 / Terminal** - Terminal window management
-- **Obsidian** - Notes integration with vault/folder structure
+- **Obsidian** - Notes open in separate pop-out windows per workspace
 - **Google Chrome** - URL opening in new windows
 
 ## Requirements
@@ -152,6 +152,8 @@ Dreamspaces is designed to work with:
 - tmux (installed by `ds setup`)
 - jq (installed by `ds setup`)
 - For git worktree support: `npm install -g @johnlindquist/worktree`
+- For Obsidian notes in separate windows: Install the **Advanced URI** plugin
+  - Obsidian > Settings > Community Plugins > Browse > "Advanced URI" > Install & Enable
 
 ## Architecture
 

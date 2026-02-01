@@ -197,12 +197,14 @@ EOF
         fi
 
         local note_path="${folder}/${note_name}"
-        log_info "Opening Obsidian note: $note_path in vault $vault"
-        # Use proper URL encoding
+        log_info "Opening Obsidian note in new window: $note_path"
+        # Use Advanced URI plugin to open note in separate window
+        # Install plugin: Settings > Community Plugins > Advanced URI
         local vault_encoded file_encoded
         vault_encoded=$(urlencode "$vault")
         file_encoded=$(urlencode "$note_path")
-        open "obsidian://open?vault=${vault_encoded}&file=${file_encoded}"
+        # openmode=window opens the note in a new pop-out window
+        open "obsidian://advanced-uri?vault=${vault_encoded}&filepath=${file_encoded}&openmode=window"
     else
         log_warn "Obsidian vault not found: $vault (specify notes.path in config)"
     fi
