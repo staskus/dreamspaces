@@ -172,11 +172,25 @@ function M.close()
   local ideApp = projectConfig and projectConfig.ide and projectConfig.ide.app or "Cursor"
   local terminalApp = projectConfig and projectConfig.terminal and projectConfig.terminal.app or "iTerm"
 
-  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm", "Obsidian" }
+  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm" }
 
   -- Close windows on this space
   local closed = spaces.closeWindowsOnSpace(spaceId, appsToClose)
   hs.printf("Dreamspaces: closed %d windows", closed)
+
+  -- Close Obsidian note window by matching title (pop-out windows may not be on space)
+  local noteName = workspace.branch:gsub("/", "-") .. ".md"
+  local obsidianApp = hs.application.get("Obsidian")
+  if obsidianApp then
+    for _, win in ipairs(obsidianApp:allWindows()) do
+      local title = win:title() or ""
+      if title:find(noteName, 1, true) or title:find(workspace.branch:gsub("/", "-"), 1, true) then
+        hs.printf("Dreamspaces: closing Obsidian window: %s", title)
+        win:close()
+        closed = closed + 1
+      end
+    end
+  end
 
   -- Remove from state first
   state.removeWorkspace(workspace.project, workspace.branch)
@@ -320,6 +334,22 @@ end
 function M.list()
   state.reload()
   return state.listWorkspaces()
+end
+
+-- Check if Obsidian note window is already open
+function M.isObsidianNoteOpen(branch)
+  local noteName = branch:gsub("/", "-")
+  local obsidianApp = hs.application.get("Obsidian")
+  if not obsidianApp then
+    return false
+  end
+  for _, win in ipairs(obsidianApp:allWindows()) do
+    local title = win:title() or ""
+    if title:find(noteName, 1, true) then
+      return true
+    end
+  end
+  return false
 end
 
 -- Initialize on load

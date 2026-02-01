@@ -137,6 +137,15 @@ APPLESCRIPT
 apps_launch_notes() {
     local project="$1"
     local branch="$2"
+
+    # Check if note is already open in Obsidian
+    local already_open
+    already_open=$(hs -c "return dreamspaces.isObsidianNoteOpen('$branch')" 2>/dev/null)
+    if [[ "$already_open" == "true" ]]; then
+        log_info "Obsidian note already open for $branch"
+        return 0
+    fi
+
     local project_config
     project_config=$(config_get_project "$project")
 
