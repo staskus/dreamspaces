@@ -138,9 +138,9 @@ apps_launch_notes() {
     local project="$1"
     local branch="$2"
 
-    # Check if note is already open in Obsidian
+    # Check if note is already open in Obsidian (extract just the return value, skip debug messages)
     local already_open
-    already_open=$(hs -c "return dreamspaces.isObsidianNoteOpen('$branch')" 2>/dev/null)
+    already_open=$(hs -c "return dreamspaces.isObsidianNoteOpen('$branch')" 2>/dev/null | tail -1)
     if [[ "$already_open" == "true" ]]; then
         log_info "Obsidian note already open for $branch"
         return 0
