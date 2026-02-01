@@ -249,6 +249,47 @@ APPLESCRIPT
     done <<< "$urls"
 }
 
+apps_launch_browser() {
+    local project="$1"
+    local branch="$2"
+    local project_config
+    project_config=$(config_get_project "$project")
+
+    local github_repo
+    github_repo=$(echo "$project_config" | jq -r '.github // empty')
+
+    if [[ -z "$github_repo" ]]; then
+        return 0
+    fi
+
+    local url="about:blank"
+
+    # Check if PR exists for this branch
+    if command -v gh &> /dev/null; then
+        local pr_url
+        pr_url=$(gh pr view "$branch" --repo "$github_repo" --json url --jq '.url' 2>/dev/null)
+        if [[ -n "$pr_url" ]]; then
+            url="$pr_url"
+            log_info "Opening PR: $url"
+        else
+            log_info "No PR found for $branch, opening blank page"
+        fi
+    else
+        log_warn "gh CLI not installed, opening blank page"
+    fi
+
+    osascript - "$url" <<'APPLESCRIPT'
+on run argv
+    set theURL to item 1 of argv
+    tell application "Google Chrome"
+        activate
+        make new window
+        set URL of active tab of front window to theURL
+    end tell
+end run
+APPLESCRIPT
+}
+
 apps_launch_all() {
     local project="$1"
     local branch="$2"
@@ -295,6 +336,8 @@ apps_launch_all() {
     apps_launch_terminal "$project" "$branch" "$work_path"
     sleep 1
     apps_launch_notes "$project" "$branch"
+    sleep 1
+    apps_launch_browser "$project" "$branch"
     sleep 1
     apps_launch_urls "$project" "$branch"
 }

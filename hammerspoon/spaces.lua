@@ -4,25 +4,26 @@ local M = {}
 local hs = _G.hs
 local configFile = os.getenv("HOME") .. "/.config/dreamspaces/config.json"
 
+local function defaultLayout()
+  return {
+    ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
+    notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
+    terminal = { x = 0.5, y = 0, w = 0.5, h = 0.6 },
+    browser = { x = 0.5, y = 0.6, w = 0.5, h = 0.4 }
+  }
+end
+
 local function loadLayout()
   local file = io.open(configFile, "r")
   if not file then
-    return {
-      ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
-      notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
-      terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
-    }
+    return defaultLayout()
   end
 
   local content = file:read("*all")
   file:close()
 
   if not content or content == "" then
-    return {
-      ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
-      notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
-      terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
-    }
+    return defaultLayout()
   end
 
   local ok, config = pcall(hs.json.decode, content)
@@ -30,11 +31,7 @@ local function loadLayout()
     return config.layout
   end
 
-  return {
-    ide = { x = 0, y = 0, w = 0.5, h = 0.6 },
-    notes = { x = 0, y = 0.6, w = 0.5, h = 0.4 },
-    terminal = { x = 0.5, y = 0, w = 0.5, h = 1.0 }
-  }
+  return defaultLayout()
 end
 
 -- Get main screen info
@@ -245,10 +242,12 @@ function M.arrangeWindows(project)
   local ideApps = { "Xcode", "Cursor", "Visual Studio Code", "VSCode", "Code" }
   local terminalApps = { "iTerm2", "iTerm", "Terminal" }
   local notesApps = { "Obsidian" }
+  local browserApps = { "Google Chrome", "Chrome", "Safari", "Firefox", "Arc" }
 
   local ideWindow = nil
   local terminalWindow = nil
   local notesWindow = nil
+  local browserWindow = nil
 
   -- Get current space ID and only look at windows on THIS space
   local currentSpaceId = hs.spaces.focusedSpace()
@@ -291,6 +290,15 @@ function M.arrangeWindows(project)
             end
           end
         end
+
+        if not browserWindow then
+          for _, name in ipairs(browserApps) do
+            if appName == name then
+              browserWindow = win
+              break
+            end
+          end
+        end
       end
     end
   end
@@ -318,6 +326,16 @@ function M.arrangeWindows(project)
   if notesWindow and layout.notes then
     local l = layout.notes
     notesWindow:setFrame({
+      x = frame.x + frame.w * l.x,
+      y = frame.y + frame.h * l.y,
+      w = frame.w * l.w,
+      h = frame.h * l.h
+    })
+  end
+
+  if browserWindow and layout.browser then
+    local l = layout.browser
+    browserWindow:setFrame({
       x = frame.x + frame.w * l.x,
       y = frame.y + frame.h * l.y,
       w = frame.w * l.w,
