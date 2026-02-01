@@ -239,7 +239,7 @@ function M.arrangeWindows(project)
   local frame = screen:frame()
   local layout = loadLayout()
 
-  local ideApps = { "Xcode", "Cursor", "Visual Studio Code", "VSCode", "Code" }
+  local ideApps = { "Xcode", "Android Studio", "Cursor", "Visual Studio Code", "VSCode", "Code" }
   local terminalApps = { "iTerm2", "iTerm", "Terminal" }
   local notesApps = { "Obsidian" }
   local browserApps = { "Google Chrome", "Chrome" }
