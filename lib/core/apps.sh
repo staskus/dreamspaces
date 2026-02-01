@@ -268,6 +268,8 @@ apps_launch_all() {
                 log_info "Install with: npm install -g @johnlindquist/worktree"
                 return 1
             fi
+            # Prune stale worktree entries before creating new one
+            git -C "$project_path" worktree prune 2>/dev/null
             (cd "$project_path" && wt new "$branch" --checkout --editor none) || {
                 log_error "Failed to create worktree"
                 return 1
