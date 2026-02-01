@@ -3,6 +3,88 @@
 
 source "$DS_ROOT/lib/core/config.sh"
 
+# Install Obsidian Advanced URI plugin to a vault
+install_obsidian_plugin() {
+    local vault_path="$1"
+    local plugin_id="obsidian-advanced-uri"
+    local plugin_dir="$vault_path/.obsidian/plugins/$plugin_id"
+    local community_plugins="$vault_path/.obsidian/community-plugins.json"
+
+    # Check if .obsidian exists (valid vault)
+    if [[ ! -d "$vault_path/.obsidian" ]]; then
+        return 1
+    fi
+
+    # Check if already installed
+    if [[ -f "$plugin_dir/manifest.json" ]]; then
+        log_success "Advanced URI plugin already installed in: $(basename "$vault_path")"
+        return 0
+    fi
+
+    log_info "Installing Advanced URI plugin to: $(basename "$vault_path")"
+
+    # Create plugin directory
+    mkdir -p "$plugin_dir"
+
+    # Download latest release files from GitHub
+    local base_url="https://github.com/Vinzent03/obsidian-advanced-uri/releases/latest/download"
+
+    if curl -sL "$base_url/manifest.json" -o "$plugin_dir/manifest.json" && \
+       curl -sL "$base_url/main.js" -o "$plugin_dir/main.js"; then
+
+        # Enable the plugin in community-plugins.json
+        if [[ -f "$community_plugins" ]]; then
+            # Add to existing list if not already there
+            if ! grep -q "$plugin_id" "$community_plugins"; then
+                local content
+                content=$(cat "$community_plugins")
+                # Insert into array
+                echo "$content" | jq ". + [\"$plugin_id\"]" > "$community_plugins"
+            fi
+        else
+            # Create new file with just this plugin
+            echo "[\"$plugin_id\"]" > "$community_plugins"
+        fi
+
+        log_success "Advanced URI plugin installed in: $(basename "$vault_path")"
+        return 0
+    else
+        log_warn "Failed to download plugin files"
+        rm -rf "$plugin_dir"
+        return 1
+    fi
+}
+
+# Find and setup Obsidian vaults
+setup_obsidian_plugins() {
+    log_info "Setting up Obsidian Advanced URI plugin..."
+
+    local vaults_found=0
+
+    # Common vault locations
+    local search_paths=(
+        "$HOME/Documents"
+        "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents"
+        "$HOME/Obsidian"
+    )
+
+    # Find vaults (directories containing .obsidian)
+    for search_path in "${search_paths[@]}"; do
+        if [[ -d "$search_path" ]]; then
+            while IFS= read -r -d '' vault; do
+                local vault_path
+                vault_path=$(dirname "$vault")
+                install_obsidian_plugin "$vault_path"
+                vaults_found=$((vaults_found + 1))
+            done < <(find "$search_path" -maxdepth 2 -name ".obsidian" -type d -print0 2>/dev/null)
+        fi
+    done
+
+    if [[ $vaults_found -eq 0 ]]; then
+        log_warn "No Obsidian vaults found. Install Advanced URI plugin manually if needed."
+    fi
+}
+
 cmd_setup() {
     log_info "Setting up Dreamspaces..."
 
@@ -72,6 +154,9 @@ cmd_setup() {
         log_warn "Add this to your $hs_init:"
         echo "    require('dreamspaces')"
     fi
+
+    # Setup Obsidian Advanced URI plugin
+    setup_obsidian_plugins
 
     # Add to PATH hint
     echo ""
