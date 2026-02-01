@@ -122,6 +122,14 @@ function M.open(project, branch)
   if existing and existing.spaceId then
     local ok, err = spaces.gotoSpaceById(existing.spaceId)
     if ok then
+      -- Wait for space switch to complete
+      local maxWait = 20
+      local waited = 0
+      while hs.spaces.focusedSpace() ~= existing.spaceId and waited < maxWait do
+        hs.timer.usleep(100000)
+        waited = waited + 1
+      end
+
       hs.printf("Dreamspaces: reusing existing space %d for %s", existing.spaceId, key)
       hs.timer.doAfter(0.5, function()
         arrangeWorkspaceWindows(existing)
@@ -140,8 +148,20 @@ function M.open(project, branch)
     return { success = false, error = err or "Failed to create space" }
   end
 
-  -- Go to the new space
+  -- Go to the new space and wait for switch to complete
   spaces.gotoSpaceById(newSpaceId)
+
+  -- Wait for space switch to complete (macOS space switching is async)
+  local maxWait = 20 -- 2 seconds max
+  local waited = 0
+  while hs.spaces.focusedSpace() ~= newSpaceId and waited < maxWait do
+    hs.timer.usleep(100000) -- 100ms
+    waited = waited + 1
+  end
+
+  if hs.spaces.focusedSpace() ~= newSpaceId then
+    hs.printf("Dreamspaces: warning - space switch may not have completed")
+  end
 
   -- Save to state
   state.addWorkspace(project, branch, newSpaceId)
