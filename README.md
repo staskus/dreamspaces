@@ -4,6 +4,8 @@
 
 macOS workspace automation - launch IDE, terminal, and notes per project+branch.
 
+> **Note**: This is a personal project tailored to my workflow. Feel free to fork and adapt it to your needs rather than submitting PRs. The code is intentionally simple so you can modify it for your own setup.
+
 ## Install
 
 ```bash
@@ -110,7 +112,7 @@ Dreamspaces integrates with macOS applications to create development workspaces.
 |-----|--------|-------|
 | **iTerm** | ✅ Default | Full AppleScript support |
 | **Terminal.app** | ✅ Supported | macOS built-in |
-| Warp, Alacritty, Kitty | ❌ Not yet | PRs welcome |
+| Warp, Alacritty, Kitty | ❌ Not supported | Fork to add |
 
 ```json
 "terminal": { "app": "iTerm", "tmux": true }
@@ -124,7 +126,7 @@ Dreamspaces integrates with macOS applications to create development workspaces.
 | App | Status | Notes |
 |-----|--------|-------|
 | **Obsidian** | ✅ Supported | Requires Advanced URI plugin |
-| Notion, LogSeq, Apple Notes | ❌ Not yet | PRs welcome |
+| Notion, LogSeq, Apple Notes | ❌ Not supported | Fork to add |
 
 ```json
 "notes": {
@@ -148,7 +150,7 @@ Dreamspaces integrates with macOS applications to create development workspaces.
 | App | Status | Notes |
 |-----|--------|-------|
 | **Google Chrome** | ✅ Hardcoded | Opens URLs in new windows |
-| Safari, Firefox, Arc | ❌ Not yet | PRs welcome |
+| Safari, Firefox, Arc | ❌ Not supported | Fork to add |
 
 ```json
 "urls": ["https://github.com/org/repo", "https://linear.app/team"]
@@ -156,14 +158,12 @@ Dreamspaces integrates with macOS applications to create development workspaces.
 
 ### Adding New App Support
 
-To add support for a new app:
+Fork the repo and modify for your needs:
 
 1. **IDE**: Edit `lib/core/apps.sh` → `apps_launch_ide()` and add to `ideApps` in `hammerspoon/spaces.lua`
 2. **Terminal**: Add AppleScript handling in `apps_launch_terminal()`
 3. **Notes**: Check if app has URL scheme support, add launcher function
-4. **Browser**: Currently hardcoded; submit PR to make configurable
-
-Or [open an issue](https://github.com/staskus/dreamspaces/issues) to request support.
+4. **Browser**: Modify `apps_launch_urls()` to use your preferred browser
 
 ## Hotkeys
 
