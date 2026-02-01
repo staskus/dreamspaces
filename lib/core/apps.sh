@@ -278,15 +278,8 @@ apps_launch_browser() {
         log_warn "gh CLI not installed, opening blank page"
     fi
 
-    osascript - "$url" <<'APPLESCRIPT'
-on run argv
-    set theURL to item 1 of argv
-    tell application "Google Chrome"
-        set newWindow to make new window
-        set URL of active tab of newWindow to theURL
-    end tell
-end run
-APPLESCRIPT
+    # Use open command which respects current space, then use AppleScript to ensure new window
+    open -na "Google Chrome" --args --new-window "$url"
 }
 
 apps_launch_all() {
