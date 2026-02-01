@@ -1,11 +1,9 @@
--- Dreamspaces space management
+-- Dreamspaces space management (ID-based)
 local M = {}
 
 local hs = _G.hs
-
 local configFile = os.getenv("HOME") .. "/.config/dreamspaces/config.json"
 
--- Load layout from config
 local function loadLayout()
   local file = io.open(configFile, "r")
   if not file then
@@ -39,31 +37,99 @@ local function loadLayout()
   }
 end
 
--- Get screen spaces info
-function M.getScreenSpaces()
+-- Get main screen info
+function M.getScreenInfo()
   local mainScreen = hs.screen.mainScreen()
   if not mainScreen then
     return nil, nil, "No main screen"
   end
 
-  local allSpaces = hs.spaces.allSpaces()
   local screenUUID = mainScreen:getUUID()
+  local allSpaces = hs.spaces.allSpaces()
   local screenSpaces = allSpaces[screenUUID] or {}
 
   return screenSpaces, screenUUID, nil
 end
 
--- Ensure we have enough spaces, create if needed
-function M.ensureSpaceExists(spaceIndex)
-  local screenSpaces, screenUUID, err = M.getScreenSpaces()
+-- Create a new space and return its ID
+function M.createSpace()
+  local screenSpaces, screenUUID, err = M.getScreenInfo()
   if err then
-    hs.alert.show(err)
+    return nil, err
+  end
+
+  local countBefore = #screenSpaces
+  hs.spaces.addSpaceToScreen(screenUUID)
+
+  -- Wait for space creation and get new ID
+  hs.timer.usleep(500000)
+
+  local newSpaces = hs.spaces.allSpaces()[screenUUID] or {}
+  if #newSpaces > countBefore then
+    local newSpaceId = newSpaces[#newSpaces]
+    hs.printf("Dreamspaces: created space with ID %d (index %d)", newSpaceId, #newSpaces)
+    return newSpaceId, nil
+  end
+
+  return nil, "Failed to create space"
+end
+
+-- Go to space by ID
+function M.gotoSpaceById(spaceId)
+  if not spaceId then
+    return false, "No space ID provided"
+  end
+
+  local screenSpaces, _, err = M.getScreenInfo()
+  if err then
+    return false, err
+  end
+
+  local found = false
+  for _, sid in ipairs(screenSpaces) do
+    if sid == spaceId then
+      found = true
+      break
+    end
+  end
+
+  if not found then
+    return false, "Space ID " .. spaceId .. " not found"
+  end
+
+  hs.spaces.gotoSpace(spaceId)
+  return true, nil
+end
+
+-- Go to space by index (legacy compatibility)
+function M.gotoSpace(spaceIndex)
+  local screenSpaces, _, err = M.getScreenInfo()
+  if err then
+    return false
+  end
+
+  -- Ensure space exists
+  if not M.ensureSpaceExists(spaceIndex) then
+    return false
+  end
+
+  screenSpaces = hs.spaces.allSpaces()[hs.screen.mainScreen():getUUID()] or {}
+  if spaceIndex <= #screenSpaces then
+    hs.spaces.gotoSpace(screenSpaces[spaceIndex])
+    return true
+  end
+
+  return false
+end
+
+-- Ensure we have enough spaces
+function M.ensureSpaceExists(spaceIndex)
+  local screenSpaces, screenUUID, err = M.getScreenInfo()
+  if err then
     return false
   end
 
   local currentCount = #screenSpaces
-
-  -- Create spaces if needed
   while currentCount < spaceIndex do
     hs.spaces.addSpaceToScreen(screenUUID)
     currentCount = currentCount + 1
@@ -73,45 +139,98 @@ function M.ensureSpaceExists(spaceIndex)
   return true
 end
 
--- Switch to a space by index
-function M.gotoSpace(spaceIndex)
-  -- Ensure space exists first
-  if not M.ensureSpaceExists(spaceIndex) then
-    return false
+-- Remove space by ID
+function M.removeSpaceById(spaceId)
+  if not spaceId then
+    return false, "No space ID provided"
   end
 
-  local screenSpaces, _, err = M.getScreenSpaces()
+  local screenSpaces, _, err = M.getScreenInfo()
   if err then
-    hs.alert.show(err)
-    return false
+    return false, err
   end
 
-  if spaceIndex <= #screenSpaces then
-    local targetSpace = screenSpaces[spaceIndex]
-    hs.spaces.gotoSpace(targetSpace)
-    return true
+  if #screenSpaces <= 1 then
+    return false, "Cannot remove last space"
   end
 
-  return false
-end
-
--- Arrange windows for a workspace on a specific space
-function M.arrange(project, branch, spaceIndex)
-  -- Ensure space exists
-  if not M.ensureSpaceExists(spaceIndex) then
-    return false
+  local found = false
+  local foundIndex = 0
+  for i, sid in ipairs(screenSpaces) do
+    if sid == spaceId then
+      found = true
+      foundIndex = i
+      break
+    end
   end
 
-  -- Give apps time to launch and settle, then arrange
-  hs.timer.doAfter(3, function()
-    M.arrangeWindows(project)
+  if not found then
+    return false, "Space ID not found"
+  end
+
+  -- Switch away first if we're on this space
+  local focusedSpace = hs.spaces.focusedSpace()
+  if focusedSpace == spaceId then
+    local targetId = screenSpaces[1]
+    if targetId == spaceId and #screenSpaces > 1 then
+      targetId = screenSpaces[2]
+    end
+    hs.spaces.gotoSpace(targetId)
+    hs.timer.usleep(500000)
+  end
+
+  -- Remove the space
+  local ok, removeErr = pcall(function()
+    hs.spaces.removeSpace(spaceId)
   end)
 
-  return true
+  if ok then
+    hs.printf("Dreamspaces: removed space ID %d (was at index %d)", spaceId, foundIndex)
+    return true, nil
+  else
+    hs.printf("Dreamspaces: failed to remove space - %s", tostring(removeErr))
+    return false, tostring(removeErr)
+  end
 end
 
--- Arrange windows based on layout config
--- Uses orderedWindows() to get the most recently focused windows
+-- Get windows on a specific space ID
+function M.getWindowsOnSpace(spaceId)
+  local windowIds = hs.spaces.windowsForSpace(spaceId) or {}
+  local windows = {}
+
+  for _, winId in ipairs(windowIds) do
+    local win = hs.window.get(winId)
+    if win and win:isStandard() then
+      table.insert(windows, win)
+    end
+  end
+
+  return windows
+end
+
+-- Close windows for specific apps on a space
+function M.closeWindowsOnSpace(spaceId, appNames)
+  local windows = M.getWindowsOnSpace(spaceId)
+  local closed = 0
+
+  for _, win in ipairs(windows) do
+    local app = win:application()
+    if app then
+      local appName = app:name()
+      for _, target in ipairs(appNames) do
+        if appName == target then
+          win:close()
+          closed = closed + 1
+          break
+        end
+      end
+    end
+  end
+
+  return closed
+end
+
+-- Arrange windows on current space
 function M.arrangeWindows(project)
   local screen = hs.screen.mainScreen()
   if not screen then
@@ -122,24 +241,20 @@ function M.arrangeWindows(project)
   local frame = screen:frame()
   local layout = loadLayout()
 
-  -- App name mappings
   local ideApps = { "Xcode", "Cursor", "Visual Studio Code", "VSCode", "Code" }
   local terminalApps = { "iTerm2", "iTerm", "Terminal" }
   local notesApps = { "Obsidian" }
 
-  -- Find windows using orderedWindows for most recent first
   local ideWindow = nil
   local terminalWindow = nil
   local notesWindow = nil
 
   for _, win in ipairs(hs.window.orderedWindows()) do
-    -- Skip non-standard windows (fullscreen, etc.)
     if win:isStandard() then
       local app = win:application()
       if app then
         local appName = app:name()
 
-        -- Only assign if not already found (gets most recent)
         if not ideWindow then
           for _, name in ipairs(ideApps) do
             if appName == name then
@@ -170,7 +285,6 @@ function M.arrangeWindows(project)
     end
   end
 
-  -- Apply layout
   if ideWindow and layout.ide then
     local l = layout.ide
     ideWindow:setFrame({
@@ -201,7 +315,6 @@ function M.arrangeWindows(project)
     })
   end
 
-  -- Focus IDE last so it's on top
   if ideWindow then
     ideWindow:focus()
   end
@@ -209,22 +322,17 @@ function M.arrangeWindows(project)
   hs.alert.show("Windows arranged")
 end
 
--- Move window to specific space
-function M.moveToSpace(window, spaceIndex)
+-- Legacy function for backward compatibility
+function M.arrange(project, branch, spaceIndex)
   if not M.ensureSpaceExists(spaceIndex) then
     return false
   end
 
-  local screenSpaces, _, err = M.getScreenSpaces()
-  if err then
-    return false
-  end
+  hs.timer.doAfter(3, function()
+    M.arrangeWindows(project)
+  end)
 
-  if spaceIndex <= #screenSpaces then
-    hs.spaces.moveWindowToSpace(window, screenSpaces[spaceIndex])
-    return true
-  end
-  return false
+  return true
 end
 
 return M

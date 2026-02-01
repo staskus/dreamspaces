@@ -1,15 +1,13 @@
 -- Dreamspaces Hammerspoon module
--- Handles window arrangement and space management
+-- Handles workspace management, window arrangement, and space control
 
 local M = {}
 
 local spaces = require("dreamspaces.spaces")
-local picker = require("dreamspaces.picker")
 local state = require("dreamspaces.state")
 
 local configFile = os.getenv("HOME") .. "/.config/dreamspaces/config.json"
 
--- Load config
 local function loadConfig()
   local file = io.open(configFile, "r")
   if not file then return {} end
@@ -20,12 +18,18 @@ local function loadConfig()
   return {}
 end
 
--- Setup hotkeys from config
+local function getProjectConfig(projectName)
+  local config = loadConfig()
+  if config.projects and config.projects[projectName] then
+    return config.projects[projectName]
+  end
+  return nil
+end
+
 local function setupHotkeys()
   local config = loadConfig()
   if not config.hotkeys then return end
 
-  -- Switch workspace hotkey
   if config.hotkeys.switch then
     local hk = config.hotkeys.switch
     local mods = hk.mods or {"cmd", "alt"}
@@ -38,29 +42,111 @@ local function setupHotkeys()
   end
 end
 
--- Switch to a workspace's space and arrange windows (no app launching)
-function M.switchToWorkspace(workspace)
-  local spaceIndex = workspace.space
-  local project = workspace.project
+-- Open a workspace (create space, save state)
+-- Apps are launched by CLI, this just handles space management
+function M.open(project, branch)
+  branch = branch or "main"
+  local key = project .. ":" .. branch
 
-  -- Use spaces module which ensures space exists
-  if not spaces.gotoSpace(spaceIndex) then
-    hs.alert.show("Failed to switch to space " .. spaceIndex)
+  hs.printf("Dreamspaces: opening workspace %s", key)
+
+  state.reload()
+
+  -- Check if workspace already exists
+  local existing = state.getWorkspace(project, branch)
+  if existing and existing.spaceId then
+    local ok, err = spaces.gotoSpaceById(existing.spaceId)
+    if ok then
+      hs.printf("Dreamspaces: reusing existing space %d for %s", existing.spaceId, key)
+      hs.timer.doAfter(0.5, function()
+        spaces.arrangeWindows(project)
+      end)
+      return { success = true, spaceId = existing.spaceId, reused = true }
+    else
+      hs.printf("Dreamspaces: stale workspace %s, space gone - %s", key, err or "")
+      state.removeWorkspace(project, branch)
+    end
+  end
+
+  -- Create new space
+  local newSpaceId, err = spaces.createSpace()
+  if not newSpaceId then
+    return { success = false, error = err or "Failed to create space" }
+  end
+
+  -- Go to the new space
+  spaces.gotoSpaceById(newSpaceId)
+
+  -- Save to state
+  state.addWorkspace(project, branch, newSpaceId)
+
+  hs.printf("Dreamspaces: created space %d for %s", newSpaceId, key)
+
+  return { success = true, spaceId = newSpaceId }
+end
+
+-- Close current workspace
+function M.close()
+  state.reload()
+
+  local workspace = state.current()
+  if not workspace then
+    return { success = false, error = "No workspace on current space" }
+  end
+
+  local key = workspace.project .. ":" .. workspace.branch
+  hs.printf("Dreamspaces: closing workspace %s", key)
+
+  local spaceId = workspace.spaceId
+
+  -- Get project config for app names
+  local projectConfig = getProjectConfig(workspace.project)
+  local ideApp = projectConfig and projectConfig.ide and projectConfig.ide.app or "Cursor"
+  local terminalApp = projectConfig and projectConfig.terminal and projectConfig.terminal.app or "iTerm"
+
+  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm", "Obsidian" }
+
+  -- Close windows on this space
+  local closed = spaces.closeWindowsOnSpace(spaceId, appsToClose)
+  hs.printf("Dreamspaces: closed %d windows", closed)
+
+  -- Remove from state first
+  state.removeWorkspace(workspace.project, workspace.branch)
+
+  -- Remove the macOS space after a delay
+  hs.timer.doAfter(0.5, function()
+    local ok, err = spaces.removeSpaceById(spaceId)
+    if not ok then
+      hs.printf("Dreamspaces: could not remove space - %s", err or "unknown")
+      -- Clean up orphaned state entries
+      state.cleanup()
+    end
+  end)
+
+  return { success = true, key = key }
+end
+
+-- Switch to a workspace
+function M.switchToWorkspace(workspace)
+  local ok, err = spaces.gotoSpaceById(workspace.spaceId)
+  if not ok then
+    hs.alert.show("Failed: " .. (err or "unknown"))
     return false
   end
 
-  -- Arrange windows after a short delay
-  hs.timer.doAfter(0.5, function()
-    M.arrangeWindows(project)
+  hs.timer.doAfter(0.3, function()
+    spaces.arrangeWindows(workspace.project)
   end)
 
-  hs.alert.show(project .. ":" .. workspace.branch)
+  hs.alert.show(workspace.project .. ":" .. workspace.branch)
   return true
 end
 
--- Show switch picker - just switches space, doesn't re-launch apps
+-- Show switch picker
 function M.showSwitchPicker()
   state.reload()
+  state.cleanup() -- Remove any orphaned workspaces
+
   local workspaces = state.listWorkspaces()
 
   if #workspaces == 0 then
@@ -72,7 +158,7 @@ function M.showSwitchPicker()
   for _, ws in ipairs(workspaces) do
     table.insert(choices, {
       text = ws.project .. ":" .. ws.branch,
-      subText = "Space " .. ws.space,
+      subText = "Space " .. (ws.space or "?"),
       workspace = ws
     })
   end
@@ -88,32 +174,33 @@ function M.showSwitchPicker()
   chooser:show()
 end
 
--- Arrange windows for a workspace
+-- Arrange windows for current workspace
 function M.arrange(project, branch, spaceIndex)
   spaces.arrange(project, branch, spaceIndex)
 end
 
--- Arrange windows without switching spaces
 function M.arrangeWindows(project)
   spaces.arrangeWindows(project)
 end
 
--- Show workspace picker (legacy)
-function M.showPicker()
-  picker.show()
-end
-
--- Get current workspace info
+-- Get current workspace
 function M.current()
+  state.reload()
   return state.current()
 end
 
--- Reload state from disk
+-- Reload state
 function M.reload()
   state.reload()
 end
 
--- Initialize hotkeys
+-- List workspaces
+function M.list()
+  state.reload()
+  return state.listWorkspaces()
+end
+
+-- Initialize
 setupHotkeys()
 
 -- Make globally available

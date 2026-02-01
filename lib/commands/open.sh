@@ -2,7 +2,6 @@
 # ds open <project> [branch] - Open workspace for project+branch
 
 source "$DS_ROOT/lib/core/config.sh"
-source "$DS_ROOT/lib/core/spaces.sh"
 source "$DS_ROOT/lib/core/apps.sh"
 
 check_hammerspoon_accessibility() {
@@ -12,7 +11,6 @@ check_hammerspoon_accessibility() {
         return 1
     fi
 
-    # Check if Hammerspoon has accessibility permissions
     local has_access
     has_access=$(hs -c "return hs.accessibilityState()" 2>/dev/null)
     if [[ "$has_access" != "true" ]]; then
@@ -22,7 +20,6 @@ check_hammerspoon_accessibility() {
         open -a Hammerspoon
         sleep 2
 
-        # Check again after restart
         has_access=$(hs -c "return hs.accessibilityState()" 2>/dev/null)
         if [[ "$has_access" != "true" ]]; then
             log_error "Hammerspoon does not have accessibility permissions"
@@ -48,12 +45,10 @@ cmd_open() {
         exit 1
     fi
 
-    # Check Hammerspoon accessibility
     if ! check_hammerspoon_accessibility; then
         exit 1
     fi
 
-    # Validate project exists
     local project_config
     project_config=$(config_get_project "$project")
     if [[ "$project_config" == "null" ]]; then
@@ -68,26 +63,37 @@ cmd_open() {
 
     log_info "Opening workspace: ${project}:${branch}"
 
-    # Claim a space
-    local space_index
-    space_index=$(spaces_claim "$project" "$branch")
-    if [[ -z "$space_index" ]]; then
-        log_error "Failed to claim space"
+    # Create/claim space via Hammerspoon (single source of truth)
+    local result
+    result=$(hs -c "return hs.json.encode(dreamspaces.open('$project', '$branch'))" 2>/dev/null)
+
+    local success
+    success=$(echo "$result" | jq -r '.success')
+    if [[ "$success" != "true" ]]; then
+        local error
+        error=$(echo "$result" | jq -r '.error // "Unknown error"')
+        log_error "Failed to create space: $error"
         exit 1
     fi
-    log_success "Claimed space: $space_index"
 
-    # Ensure macOS space exists and switch to it
-    log_info "Setting up space $space_index..."
-    hs -c "require('dreamspaces.spaces').gotoSpace($space_index)"
-    sleep 1
+    local space_id reused
+    space_id=$(echo "$result" | jq -r '.spaceId')
+    reused=$(echo "$result" | jq -r '.reused // false')
 
-    # Launch apps
-    apps_launch_all "$project" "$branch"
+    if [[ "$reused" == "true" ]]; then
+        log_success "Switched to existing workspace (space ID: $space_id)"
+    else
+        log_success "Created new space (ID: $space_id)"
 
-    # Arrange windows after apps launch
-    log_info "Arranging windows..."
-    hs -c "dreamspaces.reload(); dreamspaces.arrange('$project', '$branch', $space_index)"
+        # Launch apps (only for new workspaces)
+        sleep 0.5
+        apps_launch_all "$project" "$branch"
 
-    log_success "Workspace opened: ${project}:${branch} on space $space_index"
+        # Arrange windows after apps launch
+        log_info "Arranging windows..."
+        sleep 2
+        hs -c "dreamspaces.arrangeWindows('$project')"
+    fi
+
+    log_success "Workspace opened: ${project}:${branch}"
 }
