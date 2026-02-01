@@ -79,10 +79,91 @@ Edit `~/.config/dreamspaces/config.json`:
 |---------|-------------|
 | `ds setup` | Install dependencies and create config |
 | `ds open <project> [branch]` | Open workspace for project+branch |
-| `ds close` | Close current workspace |
+| `ds close` | Close current workspace (keeps tmux session) |
+| `ds close --cleanup` | Close and remove worktree + tmux session |
 | `ds switch` | Switch between active workspaces |
 | `ds list` | List active workspaces |
+| `ds doctor` | Check system health and diagnose issues |
+| `ds cleanup` | Remove orphaned workspace entries |
 | `ds config` | Open config in editor |
+
+## Supported Apps
+
+Dreamspaces integrates with macOS applications to create development workspaces. Each category has supported apps with different requirements.
+
+### IDE
+
+| App | Status | Notes |
+|-----|--------|-------|
+| **Cursor** | ✅ Default | |
+| **Xcode** | ✅ Supported | Use `.xcworkspace` path |
+| **VS Code** | ✅ Supported | App name: `Visual Studio Code` |
+
+```json
+"ide": { "app": "Cursor", "open": "." }
+"ide": { "app": "Xcode", "open": "MyProject.xcworkspace" }
+```
+
+### Terminal
+
+| App | Status | Notes |
+|-----|--------|-------|
+| **iTerm** | ✅ Default | Full AppleScript support |
+| **Terminal.app** | ✅ Supported | macOS built-in |
+| Warp, Alacritty, Kitty | ❌ Not yet | PRs welcome |
+
+```json
+"terminal": { "app": "iTerm", "tmux": true }
+```
+
+- `tmux: true` creates persistent sessions that survive workspace switches
+- Sessions named `{project}-{branch}` (with `/` → `-`)
+
+### Notes
+
+| App | Status | Notes |
+|-----|--------|-------|
+| **Obsidian** | ✅ Supported | Requires Advanced URI plugin |
+| Notion, LogSeq, Apple Notes | ❌ Not yet | PRs welcome |
+
+```json
+"notes": {
+  "vault": "MyVault",
+  "folder": "Projects/my-project/branches",
+  "path": "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/MyVault"
+}
+```
+
+**Requirements:**
+- Install **Advanced URI** plugin in Obsidian (Settings → Community Plugins → Browse → "Advanced URI")
+- `ds setup` can install this automatically
+
+**Features:**
+- Notes open in separate pop-out windows per workspace
+- Auto-creates note file on first open with template
+- Note files: `{branch}.md` in the specified folder
+
+### Browser
+
+| App | Status | Notes |
+|-----|--------|-------|
+| **Google Chrome** | ✅ Hardcoded | Opens URLs in new windows |
+| Safari, Firefox, Arc | ❌ Not yet | PRs welcome |
+
+```json
+"urls": ["https://github.com/org/repo", "https://linear.app/team"]
+```
+
+### Adding New App Support
+
+To add support for a new app:
+
+1. **IDE**: Edit `lib/core/apps.sh` → `apps_launch_ide()` and add to `ideApps` in `hammerspoon/spaces.lua`
+2. **Terminal**: Add AppleScript handling in `apps_launch_terminal()`
+3. **Notes**: Check if app has URL scheme support, add launcher function
+4. **Browser**: Currently hardcoded; submit PR to make configurable
+
+Or [open an issue](https://github.com/staskus/dreamspaces/issues) to request support.
 
 ## Hotkeys
 
@@ -139,11 +220,11 @@ Dreamspaces is made possible by these open source projects:
 
 ### Integrated Apps
 
-Dreamspaces is designed to work with:
-- **Xcode / Cursor / VS Code** - IDE window management
-- **iTerm2 / Terminal** - Terminal window management
-- **Obsidian** - Notes open in separate pop-out windows per workspace
-- **Google Chrome** - URL opening in new windows
+See [Supported Apps](#supported-apps) for the full list. Currently:
+- **IDE**: Cursor, Xcode, VS Code
+- **Terminal**: iTerm, Terminal.app (with optional tmux)
+- **Notes**: Obsidian (with Advanced URI plugin)
+- **Browser**: Google Chrome
 
 ## Requirements
 
