@@ -296,5 +296,12 @@ apps_launch_all() {
     sleep 1
     apps_launch_notes "$project" "$branch"
     sleep 1
+    apps_launch_browser
+    sleep 1
     apps_launch_urls "$project" "$branch"
+}
+
+apps_launch_browser() {
+    log_info "Opening Chrome"
+    open -na "Google Chrome" --args --new-window
 }

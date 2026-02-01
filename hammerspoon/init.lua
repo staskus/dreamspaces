@@ -172,7 +172,7 @@ function M.close()
   local ideApp = projectConfig and projectConfig.ide and projectConfig.ide.app or "Cursor"
   local terminalApp = projectConfig and projectConfig.terminal and projectConfig.terminal.app or "iTerm"
 
-  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm" }
+  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm", "Google Chrome" }
 
   -- Close windows on this space
   local closed = spaces.closeWindowsOnSpace(spaceId, appsToClose)
