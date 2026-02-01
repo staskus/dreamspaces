@@ -16,8 +16,9 @@ case "${1:-}" in
         cmd_open "$@"
         ;;
     close)
+        shift
         source "$DS_ROOT/lib/commands/close.sh"
-        cmd_close
+        cmd_close "$@"
         ;;
     switch)
         source "$DS_ROOT/lib/commands/switch.sh"

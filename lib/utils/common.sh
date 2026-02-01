@@ -37,7 +37,7 @@ Usage: ds <command> [options]
 Commands:
   setup              Install dependencies and create config
   open <project> [branch]  Open workspace for project+branch
-  close              Close current workspace
+  close [--cleanup]  Close current workspace (--cleanup removes worktree)
   switch             Switch between active workspaces
   list               List active workspaces
   doctor             Check system health and diagnose issues
