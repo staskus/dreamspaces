@@ -122,14 +122,6 @@ function M.open(project, branch)
   if existing and existing.spaceId then
     local ok, err = spaces.gotoSpaceById(existing.spaceId)
     if ok then
-      -- Wait for space switch to complete
-      local maxWait = 20
-      local waited = 0
-      while hs.spaces.focusedSpace() ~= existing.spaceId and waited < maxWait do
-        hs.timer.usleep(100000)
-        waited = waited + 1
-      end
-
       hs.printf("Dreamspaces: reusing existing space %d for %s", existing.spaceId, key)
       hs.timer.doAfter(0.5, function()
         arrangeWorkspaceWindows(existing)
@@ -148,20 +140,8 @@ function M.open(project, branch)
     return { success = false, error = err or "Failed to create space" }
   end
 
-  -- Go to the new space and wait for switch to complete
+  -- Go to the new space
   spaces.gotoSpaceById(newSpaceId)
-
-  -- Wait for space switch to complete (macOS space switching is async)
-  local maxWait = 20 -- 2 seconds max
-  local waited = 0
-  while hs.spaces.focusedSpace() ~= newSpaceId and waited < maxWait do
-    hs.timer.usleep(100000) -- 100ms
-    waited = waited + 1
-  end
-
-  if hs.spaces.focusedSpace() ~= newSpaceId then
-    hs.printf("Dreamspaces: warning - space switch may not have completed")
-  end
 
   -- Save to state
   state.addWorkspace(project, branch, newSpaceId)
@@ -192,7 +172,7 @@ function M.close()
   local ideApp = projectConfig and projectConfig.ide and projectConfig.ide.app or "Cursor"
   local terminalApp = projectConfig and projectConfig.terminal and projectConfig.terminal.app or "iTerm"
 
-  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm", "Google Chrome" }
+  local appsToClose = { ideApp, terminalApp, "iTerm2", "iTerm" }
 
   -- Close windows on this space
   local closed = spaces.closeWindowsOnSpace(spaceId, appsToClose)
@@ -370,72 +350,6 @@ function M.isObsidianNoteOpen(branch)
     end
   end
   return false
-end
-
--- Open Chrome with URL on current space
-function M.openBrowser(url)
-  local currentSpaceId = hs.spaces.focusedSpace()
-
-  -- Get existing Chrome windows before opening
-  local chromeApp = hs.application.get("Google Chrome")
-  local existingWindows = {}
-  if chromeApp then
-    for _, win in ipairs(chromeApp:allWindows()) do
-      existingWindows[win:id()] = true
-    end
-  end
-
-  -- Open Chrome with new window
-  hs.execute('open -na "Google Chrome" --args --new-window "' .. url .. '"')
-
-  -- Wait for new window and move it to current space
-  hs.timer.doAfter(1, function()
-    local chrome = hs.application.get("Google Chrome")
-    if chrome then
-      for _, win in ipairs(chrome:allWindows()) do
-        if not existingWindows[win:id()] then
-          -- This is a new window, move it to current space
-          hs.spaces.moveWindowToSpace(win, currentSpaceId)
-          hs.printf("Dreamspaces: moved Chrome window to space %d", currentSpaceId)
-        end
-      end
-    end
-  end)
-
-  return true
-end
-
--- Open Obsidian note on current space
-function M.openNote(obsidianUrl)
-  local currentSpaceId = hs.spaces.focusedSpace()
-
-  -- Get existing Obsidian windows before opening
-  local obsidianApp = hs.application.get("Obsidian")
-  local existingWindows = {}
-  if obsidianApp then
-    for _, win in ipairs(obsidianApp:allWindows()) do
-      existingWindows[win:id()] = true
-    end
-  end
-
-  -- Open note via URL scheme
-  hs.execute('open "' .. obsidianUrl .. '"')
-
-  -- Wait for new window and move it to current space
-  hs.timer.doAfter(1.5, function()
-    local obsidian = hs.application.get("Obsidian")
-    if obsidian then
-      for _, win in ipairs(obsidian:allWindows()) do
-        if not existingWindows[win:id()] then
-          -- This is a new window, move it to current space
-          hs.spaces.moveWindowToSpace(win, currentSpaceId)
-          hs.printf("Dreamspaces: moved Obsidian window to space %d", currentSpaceId)
-        end
-      end
-    end
-  end)
-
-  return true
 end
 
 -- Initialize on load

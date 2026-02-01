@@ -213,12 +213,7 @@ EOF
         vault_encoded=$(urlencode "$vault")
         file_encoded=$(urlencode "$note_path")
         # openmode=window opens the note in a new pop-out window
-        local obsidian_url="obsidian://advanced-uri?vault=${vault_encoded}&filepath=${file_encoded}&openmode=window"
-        # Use Hammerspoon to ensure window opens on correct space
-        hs -c "dreamspaces.openNote('$obsidian_url')" 2>/dev/null || {
-            # Fallback to direct open
-            open "$obsidian_url"
-        }
+        open "obsidian://advanced-uri?vault=${vault_encoded}&filepath=${file_encoded}&openmode=window"
     else
         log_warn "Obsidian vault not found: $vault (specify notes.path in config)"
     fi
@@ -252,42 +247,6 @@ end run
 APPLESCRIPT
         fi
     done <<< "$urls"
-}
-
-apps_launch_browser() {
-    local project="$1"
-    local branch="$2"
-    local project_config
-    project_config=$(config_get_project "$project")
-
-    local github_repo
-    github_repo=$(echo "$project_config" | jq -r '.github // empty')
-
-    if [[ -z "$github_repo" ]]; then
-        return 0
-    fi
-
-    local url="about:blank"
-
-    # Check if PR exists for this branch
-    if command -v gh &> /dev/null; then
-        local pr_url
-        pr_url=$(gh pr view "$branch" --repo "$github_repo" --json url --jq '.url' 2>/dev/null)
-        if [[ -n "$pr_url" ]]; then
-            url="$pr_url"
-            log_info "Opening PR: $url"
-        else
-            log_info "No PR found for $branch, opening blank page"
-        fi
-    else
-        log_warn "gh CLI not installed, opening blank page"
-    fi
-
-    # Use Hammerspoon to open Chrome on the correct space
-    hs -c "dreamspaces.openBrowser('$url')" 2>/dev/null || {
-        # Fallback to open command
-        open -na "Google Chrome" --args --new-window "$url"
-    }
 }
 
 apps_launch_all() {
@@ -336,8 +295,6 @@ apps_launch_all() {
     apps_launch_terminal "$project" "$branch" "$work_path"
     sleep 1
     apps_launch_notes "$project" "$branch"
-    sleep 1
-    apps_launch_browser "$project" "$branch"
     sleep 1
     apps_launch_urls "$project" "$branch"
 }
