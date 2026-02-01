@@ -158,13 +158,9 @@ cmd_close() {
 
     log_info "Closing workspace: ${project}:${branch}"
 
-    # Kill tmux session
+    # Session name for tmux (used later if cleanup requested)
     local session_name="${project}-${branch}"
     session_name=$(echo "$session_name" | tr '/' '-' | tr '.' '-')
-    if tmux has-session -t "$session_name" 2>/dev/null; then
-        log_info "Killing tmux session: $session_name"
-        tmux kill-session -t "$session_name" 2>/dev/null
-    fi
 
     # Close workspace via Hammerspoon (handles windows + space removal)
     local raw_result result
@@ -182,8 +178,14 @@ cmd_close() {
         exit 1
     fi
 
-    # Cleanup worktree if requested
+    # Cleanup worktree and tmux session if requested
     if [[ "$cleanup" == "true" ]]; then
+        # Kill tmux session
+        if tmux has-session -t "$session_name" 2>/dev/null; then
+            log_info "Killing tmux session: $session_name"
+            tmux kill-session -t "$session_name" 2>/dev/null
+        fi
+
         log_info "Cleaning up worktree..."
         remove_worktree "$project" "$branch"
     fi
