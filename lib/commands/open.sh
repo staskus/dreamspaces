@@ -64,11 +64,19 @@ cmd_open() {
     log_info "Opening workspace: ${project}:${branch}"
 
     # Create/claim space via Hammerspoon (single source of truth)
-    local result
-    result=$(hs -c "return hs.json.encode(dreamspaces.open('$project', '$branch'))" 2>/dev/null)
+    local raw_result result
+    raw_result=$(hs -c "return hs.json.encode(dreamspaces.open('$project', '$branch'))" 2>/dev/null)
+    # Extract only the JSON line (hs.printf outputs debug messages before it)
+    result=$(echo "$raw_result" | grep -E '^\{.*\}$' | tail -1)
+
+    if [[ -z "$result" ]]; then
+        log_error "Failed to get response from Hammerspoon"
+        log_error "Raw output: $raw_result"
+        exit 1
+    fi
 
     local success
-    success=$(echo "$result" | jq -r '.success')
+    success=$(echo "$result" | jq -r '.success' 2>/dev/null)
     if [[ "$success" != "true" ]]; then
         local error
         error=$(echo "$result" | jq -r '.error // "Unknown error"')
