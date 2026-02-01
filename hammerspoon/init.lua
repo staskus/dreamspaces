@@ -352,6 +352,72 @@ function M.isObsidianNoteOpen(branch)
   return false
 end
 
+-- Open Chrome with URL on current space
+function M.openBrowser(url)
+  local currentSpaceId = hs.spaces.focusedSpace()
+
+  -- Get existing Chrome windows before opening
+  local chromeApp = hs.application.get("Google Chrome")
+  local existingWindows = {}
+  if chromeApp then
+    for _, win in ipairs(chromeApp:allWindows()) do
+      existingWindows[win:id()] = true
+    end
+  end
+
+  -- Open Chrome with new window
+  hs.execute('open -na "Google Chrome" --args --new-window "' .. url .. '"')
+
+  -- Wait for new window and move it to current space
+  hs.timer.doAfter(1, function()
+    local chrome = hs.application.get("Google Chrome")
+    if chrome then
+      for _, win in ipairs(chrome:allWindows()) do
+        if not existingWindows[win:id()] then
+          -- This is a new window, move it to current space
+          hs.spaces.moveWindowToSpace(win, currentSpaceId)
+          hs.printf("Dreamspaces: moved Chrome window to space %d", currentSpaceId)
+        end
+      end
+    end
+  end)
+
+  return true
+end
+
+-- Open Obsidian note on current space
+function M.openNote(obsidianUrl)
+  local currentSpaceId = hs.spaces.focusedSpace()
+
+  -- Get existing Obsidian windows before opening
+  local obsidianApp = hs.application.get("Obsidian")
+  local existingWindows = {}
+  if obsidianApp then
+    for _, win in ipairs(obsidianApp:allWindows()) do
+      existingWindows[win:id()] = true
+    end
+  end
+
+  -- Open note via URL scheme
+  hs.execute('open "' .. obsidianUrl .. '"')
+
+  -- Wait for new window and move it to current space
+  hs.timer.doAfter(1.5, function()
+    local obsidian = hs.application.get("Obsidian")
+    if obsidian then
+      for _, win in ipairs(obsidian:allWindows()) do
+        if not existingWindows[win:id()] then
+          -- This is a new window, move it to current space
+          hs.spaces.moveWindowToSpace(win, currentSpaceId)
+          hs.printf("Dreamspaces: moved Obsidian window to space %d", currentSpaceId)
+        end
+      end
+    end
+  end)
+
+  return true
+end
+
 -- Initialize on load
 local function init()
   -- Setup hotkeys

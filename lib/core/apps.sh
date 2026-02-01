@@ -213,7 +213,12 @@ EOF
         vault_encoded=$(urlencode "$vault")
         file_encoded=$(urlencode "$note_path")
         # openmode=window opens the note in a new pop-out window
-        open "obsidian://advanced-uri?vault=${vault_encoded}&filepath=${file_encoded}&openmode=window"
+        local obsidian_url="obsidian://advanced-uri?vault=${vault_encoded}&filepath=${file_encoded}&openmode=window"
+        # Use Hammerspoon to ensure window opens on correct space
+        hs -c "dreamspaces.openNote('$obsidian_url')" 2>/dev/null || {
+            # Fallback to direct open
+            open "$obsidian_url"
+        }
     else
         log_warn "Obsidian vault not found: $vault (specify notes.path in config)"
     fi
@@ -278,8 +283,11 @@ apps_launch_browser() {
         log_warn "gh CLI not installed, opening blank page"
     fi
 
-    # Use open command which respects current space, then use AppleScript to ensure new window
-    open -na "Google Chrome" --args --new-window "$url"
+    # Use Hammerspoon to open Chrome on the correct space
+    hs -c "dreamspaces.openBrowser('$url')" 2>/dev/null || {
+        # Fallback to open command
+        open -na "Google Chrome" --args --new-window "$url"
+    }
 }
 
 apps_launch_all() {
