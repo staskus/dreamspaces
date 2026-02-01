@@ -282,9 +282,8 @@ apps_launch_browser() {
 on run argv
     set theURL to item 1 of argv
     tell application "Google Chrome"
-        activate
-        make new window
-        set URL of active tab of front window to theURL
+        set newWindow to make new window
+        set URL of active tab of newWindow to theURL
     end tell
 end run
 APPLESCRIPT
