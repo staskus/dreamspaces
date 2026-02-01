@@ -165,10 +165,11 @@ function M.removeSpaceById(spaceId)
   end
 
   if not found then
-    return false, "Space ID not found"
+    -- Space already removed
+    return true, nil
   end
 
-  -- Switch away first if we're on this space
+  -- Switch away first if we're still on this space
   local focusedSpace = hs.spaces.focusedSpace()
   if focusedSpace == spaceId then
     local targetId = screenSpaces[1]

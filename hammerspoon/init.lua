@@ -98,6 +98,7 @@ function M.close()
   hs.printf("Dreamspaces: closing workspace %s", key)
 
   local spaceId = workspace.spaceId
+  local currentIndex = state.spaceIdToIndex(spaceId)
 
   -- Get project config for app names
   local projectConfig = getProjectConfig(workspace.project)
@@ -113,14 +114,53 @@ function M.close()
   -- Remove from state first
   state.removeWorkspace(workspace.project, workspace.branch)
 
-  -- Remove the macOS space after a delay
+  -- Find closest workspace to switch to, or space 1
+  local targetSpaceId = nil
+  local otherWorkspaces = state.listWorkspaces()
+
+  if #otherWorkspaces > 0 then
+    -- Find closest workspace by index
+    local closestWs = nil
+    local closestDist = 999
+    for _, ws in ipairs(otherWorkspaces) do
+      if ws.spaceId ~= spaceId then
+        local dist = math.abs((ws.space or 999) - (currentIndex or 1))
+        if dist < closestDist then
+          closestDist = dist
+          closestWs = ws
+        end
+      end
+    end
+    if closestWs then
+      targetSpaceId = closestWs.spaceId
+      hs.printf("Dreamspaces: switching to closest workspace %s:%s", closestWs.project, closestWs.branch)
+    end
+  end
+
+  -- Switch to target or space 1
+  if targetSpaceId then
+    spaces.gotoSpaceById(targetSpaceId)
+  else
+    -- Go to space 1
+    local screenSpaces, _, _ = spaces.getScreenInfo()
+    if screenSpaces and #screenSpaces > 0 then
+      local space1 = screenSpaces[1]
+      if space1 ~= spaceId then
+        hs.spaces.gotoSpace(space1)
+      elseif #screenSpaces > 1 then
+        hs.spaces.gotoSpace(screenSpaces[2])
+      end
+    end
+  end
+
+  -- Remove the macOS space after switching
   hs.timer.doAfter(0.5, function()
     local ok, err = spaces.removeSpaceById(spaceId)
     if not ok then
       hs.printf("Dreamspaces: could not remove space - %s", err or "unknown")
-      -- Clean up orphaned state entries
-      state.cleanup()
     end
+    -- Clean up any orphaned state entries
+    state.cleanup()
   end)
 
   return { success = true, key = key }
