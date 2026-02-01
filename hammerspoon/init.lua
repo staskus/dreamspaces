@@ -8,6 +8,9 @@ local state = require("dreamspaces.state")
 
 local configFile = os.getenv("HOME") .. "/.config/dreamspaces/config.json"
 
+-- Visual overlay for workspace indicator
+local workspaceOverlay = nil
+
 local function loadConfig()
   local file = io.open(configFile, "r")
   if not file then return {} end
@@ -26,20 +29,82 @@ local function getProjectConfig(projectName)
   return nil
 end
 
+-- Show a nice visual indicator for the current workspace
+local function showWorkspaceIndicator(project, branch)
+  -- Clean up previous overlay
+  if workspaceOverlay then
+    workspaceOverlay:delete()
+    workspaceOverlay = nil
+  end
+
+  local screen = hs.screen.mainScreen()
+  local frame = screen:frame()
+
+  -- Create a canvas overlay at top center
+  local width = 400
+  local height = 60
+  local x = frame.x + (frame.w - width) / 2
+  local y = frame.y + 80
+
+  workspaceOverlay = hs.canvas.new({ x = x, y = y, w = width, h = height })
+
+  -- Background with rounded corners
+  workspaceOverlay:appendElements({
+    {
+      type = "rectangle",
+      action = "fill",
+      roundedRectRadii = { xRadius = 12, yRadius = 12 },
+      fillColor = { red = 0.1, green = 0.1, blue = 0.1, alpha = 0.9 },
+    },
+    {
+      type = "rectangle",
+      action = "stroke",
+      roundedRectRadii = { xRadius = 12, yRadius = 12 },
+      strokeColor = { red = 0.3, green = 0.6, blue = 1.0, alpha = 0.8 },
+      strokeWidth = 2,
+    },
+    {
+      type = "text",
+      text = project .. ":" .. branch,
+      textSize = 24,
+      textColor = { white = 1, alpha = 1 },
+      textAlignment = "center",
+      frame = { x = 0, y = 12, w = width, h = 40 },
+    },
+  })
+
+  workspaceOverlay:level(hs.canvas.windowLevels.overlay)
+  workspaceOverlay:show()
+
+  -- Fade out after 1.5 seconds
+  hs.timer.doAfter(1.5, function()
+    if workspaceOverlay then
+      workspaceOverlay:delete()
+      workspaceOverlay = nil
+    end
+  end)
+end
+
 local function setupHotkeys()
   local config = loadConfig()
   if not config.hotkeys then return end
 
   if config.hotkeys.switch then
     local hk = config.hotkeys.switch
-    local mods = hk.mods or {"cmd", "alt"}
-    local key = hk.key or "space"
+    local mods = hk.mods or {"alt"}
+    local key = hk.key or "tab"
 
     hs.hotkey.bind(mods, key, function()
       M.showSwitchPicker()
     end)
     hs.printf("Dreamspaces: bound switch hotkey to %s+%s", table.concat(mods, "+"), key)
   end
+end
+
+-- Arrange windows that are already on this space (don't move from other spaces)
+local function arrangeWorkspaceWindows(workspace)
+  -- Just arrange windows that are already on this space
+  spaces.arrangeWindows(workspace.project)
 end
 
 -- Open a workspace (create space, save state)
@@ -59,7 +124,8 @@ function M.open(project, branch)
     if ok then
       hs.printf("Dreamspaces: reusing existing space %d for %s", existing.spaceId, key)
       hs.timer.doAfter(0.5, function()
-        spaces.arrangeWindows(project)
+        arrangeWorkspaceWindows(existing)
+        showWorkspaceIndicator(project, branch)
       end)
       return { success = true, spaceId = existing.spaceId, reused = true }
     else
@@ -81,6 +147,7 @@ function M.open(project, branch)
   state.addWorkspace(project, branch, newSpaceId)
 
   hs.printf("Dreamspaces: created space %d for %s", newSpaceId, key)
+  showWorkspaceIndicator(project, branch)
 
   return { success = true, spaceId = newSpaceId }
 end
@@ -116,6 +183,7 @@ function M.close()
 
   -- Find closest workspace to switch to, or space 1
   local targetSpaceId = nil
+  local targetWorkspace = nil
   local otherWorkspaces = state.listWorkspaces()
 
   if #otherWorkspaces > 0 then
@@ -133,6 +201,7 @@ function M.close()
     end
     if closestWs then
       targetSpaceId = closestWs.spaceId
+      targetWorkspace = closestWs
       hs.printf("Dreamspaces: switching to closest workspace %s:%s", closestWs.project, closestWs.branch)
     end
   end
@@ -140,6 +209,12 @@ function M.close()
   -- Switch to target or space 1
   if targetSpaceId then
     spaces.gotoSpaceById(targetSpaceId)
+    hs.timer.doAfter(0.5, function()
+      if targetWorkspace then
+        arrangeWorkspaceWindows(targetWorkspace)
+        showWorkspaceIndicator(targetWorkspace.project, targetWorkspace.branch)
+      end
+    end)
   else
     -- Go to space 1
     local screenSpaces, _, _ = spaces.getScreenInfo()
@@ -166,7 +241,7 @@ function M.close()
   return { success = true, key = key }
 end
 
--- Switch to a workspace
+-- Switch to a workspace - ensures apps are present and arranged
 function M.switchToWorkspace(workspace)
   local ok, err = spaces.gotoSpaceById(workspace.spaceId)
   if not ok then
@@ -174,11 +249,12 @@ function M.switchToWorkspace(workspace)
     return false
   end
 
+  -- Ensure apps are on this space and arrange them
   hs.timer.doAfter(0.3, function()
-    spaces.arrangeWindows(workspace.project)
+    arrangeWorkspaceWindows(workspace)
+    showWorkspaceIndicator(workspace.project, workspace.branch)
   end)
 
-  hs.alert.show(workspace.project .. ":" .. workspace.branch)
   return true
 end
 
@@ -194,10 +270,16 @@ function M.showSwitchPicker()
     return
   end
 
+  -- Check which workspace we're currently on
+  local currentWs = state.current()
+  local currentKey = currentWs and (currentWs.project .. ":" .. currentWs.branch) or nil
+
   local choices = {}
   for _, ws in ipairs(workspaces) do
+    local wsKey = ws.project .. ":" .. ws.branch
+    local isCurrent = (wsKey == currentKey)
     table.insert(choices, {
-      text = ws.project .. ":" .. ws.branch,
+      text = ws.project .. ":" .. ws.branch .. (isCurrent and " (current)" or ""),
       subText = "Space " .. (ws.space or "?"),
       workspace = ws
     })
