@@ -40,6 +40,7 @@ Commands:
   close [--cleanup]  Close current workspace (--cleanup removes worktree)
   switch             Switch between active workspaces
   list               List active workspaces
+  arrange            Re-arrange windows on current space
   doctor             Check system health and diagnose issues
   cleanup            Remove orphaned workspace entries
   config             Open config file in editor

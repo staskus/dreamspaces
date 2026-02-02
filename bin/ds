@@ -41,6 +41,9 @@ case "${1:-}" in
             log_success "No orphaned workspaces found"
         fi
         ;;
+    arrange)
+        hs -c "dreamspaces.arrangeWindows()" 2>/dev/null
+        ;;
     config)
         ensure_config_dir
         if [[ ! -f "$CONFIG_FILE" ]]; then
