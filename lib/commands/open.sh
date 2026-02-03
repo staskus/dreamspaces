@@ -97,10 +97,10 @@ cmd_open() {
         sleep 0.5
         apps_launch_all "$project" "$branch"
 
-        # Arrange windows after apps launch
+        # Move windows to this space and arrange
         log_info "Arranging windows..."
         sleep 2
-        hs -c "dreamspaces.arrangeWindows('$project')"
+        hs -c "dreamspaces.moveWindowsToCurrentSpace(); dreamspaces.arrangeWindows('$project')"
     fi
 
     log_success "Workspace opened: ${project}:${branch}"

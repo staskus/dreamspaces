@@ -319,6 +319,11 @@ function M.arrangeWindows(project)
   spaces.arrangeWindows(project)
 end
 
+-- Move all workspace app windows to current space
+function M.moveWindowsToCurrentSpace()
+  return spaces.moveWindowsToCurrentSpace()
+end
+
 -- Get current workspace
 function M.current()
   state.reload()

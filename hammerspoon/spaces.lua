@@ -228,6 +228,48 @@ function M.closeWindowsOnSpace(spaceId, appNames)
   return closed
 end
 
+-- Move windows from specified apps to current space
+function M.moveWindowsToCurrentSpace()
+  local currentSpaceId = hs.spaces.focusedSpace()
+  local ideApps = { "Xcode", "Android Studio", "Cursor", "Visual Studio Code", "VSCode", "Code" }
+  local terminalApps = { "iTerm2", "iTerm", "Terminal" }
+  local notesApps = { "Obsidian" }
+  local browserApps = { "Google Chrome", "Chrome" }
+
+  local allTargetApps = {}
+  for _, apps in ipairs({ideApps, terminalApps, notesApps, browserApps}) do
+    for _, app in ipairs(apps) do
+      allTargetApps[app] = true
+    end
+  end
+
+  local moved = 0
+  for _, win in ipairs(hs.window.allWindows()) do
+    if win:isStandard() then
+      local app = win:application()
+      if app and allTargetApps[app:name()] then
+        -- Check if window is already on current space
+        local winSpaces = hs.spaces.windowSpaces(win)
+        local onCurrentSpace = false
+        for _, sid in ipairs(winSpaces or {}) do
+          if sid == currentSpaceId then
+            onCurrentSpace = true
+            break
+          end
+        end
+
+        if not onCurrentSpace then
+          hs.spaces.moveWindowToSpace(win, currentSpaceId)
+          moved = moved + 1
+          hs.printf("Dreamspaces: moved %s window to space %d", app:name(), currentSpaceId)
+        end
+      end
+    end
+  end
+
+  return moved
+end
+
 -- Arrange windows on current space (only windows ON this space)
 function M.arrangeWindows(project)
   local screen = hs.screen.mainScreen()
