@@ -23,6 +23,45 @@ get_worktree_path() {
     echo "${parent_dir}/${repo_name}-${branch_dir}"
 }
 
+# Copy setup files from main repo to worktree
+worktree_copy_setup_files() {
+    local project="$1"
+    local main_repo="$2"
+    local worktree_path="$3"
+
+    local project_config
+    project_config=$(config_get_project "$project")
+
+    local copy_files
+    copy_files=$(echo "$project_config" | jq -r '.worktreeSetup.copyFiles[]? // empty')
+
+    if [[ -z "$copy_files" ]]; then
+        return 0
+    fi
+
+    log_info "Copying setup files to worktree..."
+    while IFS= read -r file; do
+        if [[ -n "$file" ]]; then
+            local src="$main_repo/$file"
+            local dst="$worktree_path/$file"
+            local dst_dir
+            dst_dir=$(dirname "$dst")
+
+            if [[ -e "$src" ]]; then
+                mkdir -p "$dst_dir"
+                if [[ -d "$src" ]]; then
+                    cp -r "$src" "$dst"
+                else
+                    cp "$src" "$dst"
+                fi
+                log_info "  Copied: $file"
+            else
+                log_warn "  Not found: $file"
+            fi
+        fi
+    done <<< "$copy_files"
+}
+
 apps_launch_ide() {
     local project="$1"
     local branch="$2"
@@ -292,6 +331,8 @@ apps_launch_all() {
                     log_error "Failed to create worktree"
                     return 1
                 }
+                # Copy setup files after worktree creation
+                worktree_copy_setup_files "$project" "$project_path" "$work_path"
             fi
         fi
     else
