@@ -271,18 +271,26 @@ apps_launch_all() {
 
         # Check if worktree exists, if not create it
         if [[ ! -d "$work_path" ]]; then
-            log_info "Creating worktree for $branch..."
-            if ! command -v wt &> /dev/null; then
-                log_error "worktree-cli (wt) not installed"
-                log_info "Install with: npm install -g @johnlindquist/worktree"
-                return 1
+            # Check if branch is already checked out in main repo
+            local current_branch
+            current_branch=$(git -C "$project_path" branch --show-current 2>/dev/null)
+            if [[ "$current_branch" == "$branch" ]]; then
+                log_info "Branch already checked out in main repo"
+                work_path="$project_path"
+            else
+                log_info "Creating worktree for $branch..."
+                if ! command -v wt &> /dev/null; then
+                    log_error "worktree-cli (wt) not installed"
+                    log_info "Install with: npm install -g @johnlindquist/worktree"
+                    return 1
+                fi
+                # Prune stale worktree entries before creating new one
+                git -C "$project_path" worktree prune 2>/dev/null
+                (cd "$project_path" && wt new "$branch" --checkout --editor none) || {
+                    log_error "Failed to create worktree"
+                    return 1
+                }
             fi
-            # Prune stale worktree entries before creating new one
-            git -C "$project_path" worktree prune 2>/dev/null
-            (cd "$project_path" && wt new "$branch" --checkout --editor none) || {
-                log_error "Failed to create worktree"
-                return 1
-            }
         fi
     else
         work_path="$project_path"
