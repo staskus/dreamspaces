@@ -269,14 +269,16 @@ apps_launch_all() {
     if [[ "$use_worktree" == "true" ]]; then
         work_path=$(get_worktree_path "$project_path" "$branch")
 
-        # Check if worktree exists, if not create it
+        # Check if worktree exists, if not create it or find existing
         if [[ ! -d "$work_path" ]]; then
-            # Check if branch is already checked out in main repo
-            local current_branch
-            current_branch=$(git -C "$project_path" branch --show-current 2>/dev/null)
-            if [[ "$current_branch" == "$branch" ]]; then
-                log_info "Branch already checked out in main repo"
-                work_path="$project_path"
+            # Check if branch is already checked out somewhere (main repo or another worktree)
+            local existing_path
+            existing_path=$(git -C "$project_path" worktree list --porcelain 2>/dev/null | \
+                grep -B2 "branch refs/heads/$branch$" | grep "^worktree " | sed 's/^worktree //')
+
+            if [[ -n "$existing_path" ]] && [[ -d "$existing_path" ]]; then
+                log_info "Branch already checked out at: $existing_path"
+                work_path="$existing_path"
             else
                 log_info "Creating worktree for $branch..."
                 if ! command -v wt &> /dev/null; then
