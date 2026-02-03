@@ -319,9 +319,18 @@ function M.arrangeWindows(project)
   spaces.arrangeWindows(project)
 end
 
--- Move all workspace app windows to current space
-function M.moveWindowsToCurrentSpace()
-  return spaces.moveWindowsToCurrentSpace()
+-- Get window IDs (call before launching apps)
+function M.getWindowIds()
+  local ids = {}
+  for _, win in ipairs(hs.window.allWindows()) do
+    table.insert(ids, win:id())
+  end
+  return hs.json.encode(ids)
+end
+
+-- Move only NEW windows to current space
+function M.moveNewWindowsToCurrentSpace(beforeIdsJson)
+  return spaces.moveNewWindowsToCurrentSpace(beforeIdsJson)
 end
 
 -- Get current workspace

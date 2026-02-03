@@ -93,14 +93,18 @@ cmd_open() {
     else
         log_success "Created new space (ID: $space_id)"
 
+        # Capture window IDs before launching apps
+        local before_ids
+        before_ids=$(hs -c "return dreamspaces.getWindowIds()" 2>/dev/null | tail -1)
+
         # Launch apps (only for new workspaces)
         sleep 0.5
         apps_launch_all "$project" "$branch"
 
-        # Move windows to this space and arrange
+        # Move only NEW windows to this space and arrange
         log_info "Arranging windows..."
         sleep 2
-        hs -c "dreamspaces.moveWindowsToCurrentSpace(); dreamspaces.arrangeWindows('$project')"
+        hs -c "dreamspaces.moveNewWindowsToCurrentSpace('$before_ids'); dreamspaces.arrangeWindows('$project')"
     fi
 
     log_success "Workspace opened: ${project}:${branch}"

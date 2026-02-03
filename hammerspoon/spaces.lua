@@ -228,41 +228,49 @@ function M.closeWindowsOnSpace(spaceId, appNames)
   return closed
 end
 
--- Move windows from specified apps to current space
-function M.moveWindowsToCurrentSpace()
-  local currentSpaceId = hs.spaces.focusedSpace()
-  local ideApps = { "Xcode", "Android Studio", "Cursor", "Visual Studio Code", "VSCode", "Code" }
-  local terminalApps = { "iTerm2", "iTerm", "Terminal" }
-  local notesApps = { "Obsidian" }
-  local browserApps = { "Google Chrome", "Chrome" }
+-- Get current window IDs for tracking (call before launching apps)
+function M.getWindowIds()
+  local ids = {}
+  for _, win in ipairs(hs.window.allWindows()) do
+    ids[win:id()] = true
+  end
+  return ids
+end
 
-  local allTargetApps = {}
-  for _, apps in ipairs({ideApps, terminalApps, notesApps, browserApps}) do
-    for _, app in ipairs(apps) do
-      allTargetApps[app] = true
+-- Move only NEW windows (not in beforeIds) to current space
+function M.moveNewWindowsToCurrentSpace(beforeIdsJson)
+  local currentSpaceId = hs.spaces.focusedSpace()
+
+  -- Parse the before IDs from JSON
+  local beforeIds = {}
+  if beforeIdsJson and beforeIdsJson ~= "" then
+    local ok, parsed = pcall(hs.json.decode, beforeIdsJson)
+    if ok and parsed then
+      for _, id in ipairs(parsed) do
+        beforeIds[id] = true
+      end
     end
   end
 
   local moved = 0
   for _, win in ipairs(hs.window.allWindows()) do
-    if win:isStandard() then
-      local app = win:application()
-      if app and allTargetApps[app:name()] then
-        -- Check if window is already on current space
-        local winSpaces = hs.spaces.windowSpaces(win)
-        local onCurrentSpace = false
-        for _, sid in ipairs(winSpaces or {}) do
-          if sid == currentSpaceId then
-            onCurrentSpace = true
-            break
-          end
+    if win:isStandard() and not beforeIds[win:id()] then
+      -- This is a new window - check if it needs to be moved
+      local winSpaces = hs.spaces.windowSpaces(win)
+      local onCurrentSpace = false
+      for _, sid in ipairs(winSpaces or {}) do
+        if sid == currentSpaceId then
+          onCurrentSpace = true
+          break
         end
+      end
 
-        if not onCurrentSpace then
-          hs.spaces.moveWindowToSpace(win, currentSpaceId)
-          moved = moved + 1
-          hs.printf("Dreamspaces: moved %s window to space %d", app:name(), currentSpaceId)
-        end
+      if not onCurrentSpace then
+        local app = win:application()
+        local appName = app and app:name() or "unknown"
+        hs.spaces.moveWindowToSpace(win, currentSpaceId)
+        moved = moved + 1
+        hs.printf("Dreamspaces: moved new %s window to space %d", appName, currentSpaceId)
       end
     end
   end
